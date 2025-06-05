@@ -30,18 +30,18 @@ import verl.utils.torch_functional as verl_F
 from verl import DataProto
 from verl.trainer.ppo.core_algos import agg_loss, compute_policy_loss, kl_penalty
 from verl.utils.debug import GPUMemoryLogger
-from verl.utils.device import get_device_name, get_torch_device, is_cuda_available, is_npu_available
 from verl.utils.fsdp_utils import FSDPModule, fsdp2_clip_grad_norm_
 from verl.utils.py_functional import append_to_dict
 from verl.utils.seqlen_balancing import get_reverse_idx, rearrange_micro_batches
 from verl.utils.torch_functional import logprobs_from_logits
-from verl.utils.ulysses import gather_outpus_and_unpad, ulysses_pad, ulysses_pad_and_slice_inputs
+from verl.utils.ulysses import gather_outpus_and_unpad, ulysses_pad_and_slice_inputs
 from verl.workers.actor import BasePPOActor
+from verl.utils.device import get_device_name, get_torch_device, is_cuda_available, is_npu_available
 
 if is_cuda_available:
-    from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
+    from flash_attn.bert_padding import pad_input, unpad_input, rearrange, index_first_axis
 elif is_npu_available:
-    from transformers.integrations.npu_flash_attention import index_first_axis, pad_input, rearrange, unpad_input
+    from transformers.integrations.npu_flash_attention import pad_input, unpad_input, rearrange, index_first_axis
 
 
 __all__ = ["DataParallelPPOActor"]
@@ -58,11 +58,9 @@ class DataParallelPPOActor(BasePPOActor):
         self.actor_optimizer = actor_optimizer
 
         self.use_remove_padding = self.config.get("use_remove_padding", False)
-        if torch.distributed.get_rank() == 0:
-            print(f"Actor use_remove_padding={self.use_remove_padding}")
+        print(f"Actor use_remove_padding={self.use_remove_padding}")
         self.use_fused_kernels = self.config.get("use_fused_kernels", False)
-        if torch.distributed.get_rank() == 0:
-            print(f"Actor use_fused_kernels={self.use_fused_kernels}")
+        print(f"Actor use_fused_kernels={self.use_fused_kernels}")
 
         self.ulysses_sequence_parallel_size = self.config.ulysses_sequence_parallel_size
         self.use_ulysses_sp = self.ulysses_sequence_parallel_size > 1
@@ -110,20 +108,11 @@ class DataParallelPPOActor(BasePPOActor):
 
                 # pad and slice the inputs if sp > 1
                 if self.use_ulysses_sp:
-                    is_vlm_model = "multi_modal_inputs" in micro_batch
-                    if is_vlm_model:
-                        # vlm model's inputs will be sliced after embedding
-                        input_ids_rmpad, position_ids_rmpad, pad_size = ulysses_pad(
-                            input_ids_rmpad,
-                            position_ids_rmpad=position_ids_rmpad,
-                            sp_size=self.ulysses_sequence_parallel_size,
-                        )
-                    else:
-                        input_ids_rmpad, position_ids_rmpad, pad_size = ulysses_pad_and_slice_inputs(
-                            input_ids_rmpad,
-                            position_ids_rmpad=position_ids_rmpad,
-                            sp_size=self.ulysses_sequence_parallel_size,
-                        )
+                    input_ids_rmpad, position_ids_rmpad, pad_size = ulysses_pad_and_slice_inputs(
+                        input_ids_rmpad,
+                        position_ids_rmpad=position_ids_rmpad,
+                        sp_size=self.ulysses_sequence_parallel_size,
+                    )
                     input_ids_rmpad_rolled, _, _ = ulysses_pad_and_slice_inputs(
                         input_ids_rmpad_rolled,
                         position_ids_rmpad=None,
@@ -133,17 +122,13 @@ class DataParallelPPOActor(BasePPOActor):
                 input_ids_rmpad_rolled = input_ids_rmpad_rolled.squeeze(0)  # ((total_nnz / sp) + pad)
 
                 # only pass input_ids and position_ids to enable flash_attn_varlen
-                extra_args = {}
-                if self.use_fused_kernels:
-                    extra_args["temperature"] = temperature
-
                 output = self.actor_module(
                     input_ids=input_ids_rmpad,
                     attention_mask=None,
                     position_ids=position_ids_rmpad,
                     **multi_modal_inputs,
                     use_cache=False,
-                    **extra_args,
+                    temperature=temperature,
                 )  # prevent model thinks we are generating
 
                 if self.use_fused_kernels:
@@ -205,16 +190,13 @@ class DataParallelPPOActor(BasePPOActor):
                 log_probs = full_log_probs.squeeze(-1)[:, -response_length - 1 : -1]  # (bsz, response_length)
 
             else:  # not using rmpad and no ulysses sp
-                extra_args = {}
-                if self.use_fused_kernels:
-                    extra_args["temperature"] = temperature
                 output = self.actor_module(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     **multi_modal_inputs,
                     use_cache=False,
-                    **extra_args,
+                    temperature=temperature,
                 )  # prevent model thinks we are generating
 
                 if self.use_fused_kernels:

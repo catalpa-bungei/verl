@@ -91,8 +91,8 @@ def _get_qualified_name(func):
 
 def deprecated(replacement: str = ""):
     """Decorator to mark APIs as deprecated."""
-    import functools
     import warnings
+    import functools
 
     def decorator(func):
         qualified_name = _get_qualified_name(func)

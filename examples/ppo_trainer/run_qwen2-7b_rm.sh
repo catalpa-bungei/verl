@@ -12,14 +12,22 @@ gsm8k_test_path=$HOME/data/gsm8k/test.parquet
 math_train_path=$HOME/data/math/train.parquet
 math_test_path=$HOME/data/math/test.parquet
 
+gsm8k_train_path=/fs-computility/ai-shen/yangxuqing/verl/data/gsm8k/train.parquet
+gsm8k_test_path=/fs-computility/ai-shen/yangxuqing/verl/data/gsm8k/test.parquet
+math_train_path=/fs-computility/ai-shen/yangxuqing/verl/data/math/train.parquet
+math_test_path=/fs-computility/ai-shen/yangxuqing/verl/data/math/test.parquet
+
 train_files="['$gsm8k_train_path', '$math_train_path']"
 test_files="['$gsm8k_test_path', '$math_test_path']"
 
 export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
 # prepare model ckpt
+echo "Home: $HOME"
 huggingface-cli download Qwen/Qwen2-7B-Instruct --local-dir $HOME/models/Qwen2-7B-Instruct &
+# huggingface-cli download Qwen/Qwen2-7B-Instruct --local-dir /fs-computility/ai-shen/yangxuqing/verl/models/Qwen2-7B-Instruct &
 huggingface-cli download sfairXC/FsfairX-LLaMA3-RM-v0.1 --local-dir $HOME/models/FsfairX-LLaMA3-RM-v0.1 &
+# huggingface-cli download sfairXC/FsfairX-LLaMA3-RM-v0.1 --local-dir /fs-computility/ai-shen/yangxuqing/verl/models/FsfairX-LLaMA3-RM-v0.1 &
 wait
 
 python3 -m verl.trainer.main_ppo \
