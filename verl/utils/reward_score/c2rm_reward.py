@@ -5,6 +5,8 @@ import logging
 from typing import Dict, List, Tuple, Any, Optional, Set
 from collections import Counter
 from enum import Enum
+from verl.utils.reward_score import c2rm_answer_extraction
+
 
 
 # Known true: +1
@@ -30,15 +32,35 @@ def extract_confidence_level(model_output: str) -> Optional[int]:
     else:
         return "unmatched"
 
-def extract_logicnli_answer(model_output: str) -> Optional[str]:
+def convert_to_dataset_type(dataset_name: str) -> str:
     """
-    Extract answer for LogicNLI datasets.
+    Convert dataset name to a standardized dataset type.
+    
+    Args:
+        dataset_name (str): The name of the dataset.
+        
+    Returns:
+        str: The standardized dataset type.
     """
-    match = re.findall(r'\b(entailment|neutral|contradiction|self_contradiction|self-contradiction)\b', 
-                        model_output, re.IGNORECASE)
-    if match:
-        return match[-1].lower()
-    return "unmatched"
+    print("dataset_name:", dataset_name)
+    if "logicnli" in dataset_name.lower():
+        return "logicnli"
+    elif "scieval" in dataset_name.lower():
+        return "scieval"
+    elif "numinamath" in dataset_name.lower():
+        return "numina_math"
+    elif "logiqa" in dataset_name.lower():
+        return "multiple_choice"
+    elif "sciknoweval" in dataset_name.lower():
+        return "multiple_choice"
+    else:
+        print("Can't convert dataset_name:", dataset_name)
+        return "unknown dataset type"
+
+
+def extract_c2rm_answer(dataset_type, model_output: str) -> Optional[str]:
+    extractor = c2rm_answer_extraction.AnswerExtractor(dataset_type=dataset_type, responses_per_question=5)
+    return extractor.extract_answer(model_output)
 
 def compute_score_reference_data(data_source, solution_str, ground_truth, extra_info=None):
     """
@@ -53,18 +75,31 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         float: The computed score.
     """
     # print("solution_str:----------------------------------\n", solution_str,"\n")
-    solution = extract_logicnli_answer(solution_str)
-    ground_truth = ground_truth.lower()
-    correctness = "correct" if solution == ground_truth else "incorrect"
-    inconfidence_level = extract_confidence_level(solution_str)
-    if inconfidence_level == "unmatched":
-        known_signal = "unmatched"
-    elif inconfidence_level <=1:
-        known_signal = "known"
-    else:
-        known_signal = "unknown"
     reference_tag = extra_info.get("reference_tag", "unmatched") if extra_info else "unmatched"
-    print("inconfidence:",inconfidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| correctness:", correctness, "| reference_tag:", reference_tag)
+    dataset = extra_info.get("dataset", "unmatched") if extra_info else "unmatched"
+    # print("extra_info:", extra_info)
+    if dataset == "unmatched":
+        raise ValueError("Dataset is not provided in extra_info.")
+    dataset_type = convert_to_dataset_type(dataset)
+    
+    solution = extract_c2rm_answer(dataset_type, solution_str)
+
+    # ground_truth = ground_truth.lower()
+    ground_truth_extracted = extract_c2rm_answer(dataset_type, ground_truth)
+    if solution == ground_truth_extracted  or solution == ground_truth:
+        correctness = "correct"
+    else:
+        correctness = "incorrect"
+    
+    confidence_level = extract_confidence_level(solution_str)
+    if confidence_level == "unmatched":
+        known_signal = "unmatched"
+    elif confidence_level >=10:
+        known_signal = "known"
+    elif confidence_level <= 9:
+        known_signal = "unknown"
+
+    print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_tag:", reference_tag)
     
 
     if reference_tag == "all_correct":
@@ -84,30 +119,30 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     elif reference_tag == "all_wrong":
         if known_signal == "known":
             if correctness == "correct":
-                return -1.0
+                return 1.2
             elif correctness == "incorrect":
-                return 1.0
+                return 0.03
         elif known_signal == "unknown":
             if correctness == "correct":
-                return -0.1
+                return 0.98
             elif correctness == "incorrect":
                 return 0.3
         else:
-            return -0.1
+            return 0
     
     elif reference_tag == "partial_correct":
         if known_signal == "known":
             if correctness == "correct":
-                return 0.8
+                return 1.15
             elif correctness == "incorrect":
-                return -0.2
+                return 0.07
         elif known_signal == "unknown":
             if correctness == "correct":
-                return 0.5
+                return 0.93
             elif correctness == "incorrect":
-                return 0.5
+                return 0.4
         else:
-            return -0.1
+            return 0
 
         
 

@@ -1057,6 +1057,7 @@ class RayPPOTrainer:
                             )
 
                     # validate
+                    print(f"global_steps: {self.global_steps}, test_freq: {self.config.trainer.test_freq}")
                     if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and (is_last_step or self.global_steps % self.config.trainer.test_freq == 0):
                         with _timer("testing", timing_raw):
                             val_metrics: dict = self._validate()

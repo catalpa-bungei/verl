@@ -10,28 +10,88 @@ import re
 import datasets
 
 from verl.utils.hdfs_io import copy, makedirs
-from verl.utils.reward_score.math import last_boxed_only_string, remove_boxed
 
+dataset_prompt_dict = {
+    "logiqa" : 
+            "Read the question, analyze step by step and provide your answer. "
+            "Use the following format to answer:\n"
+            "Explanation: [insert step-by-step analysis here]\n"
+            "Answer: [ONLY the A/B/C/D...; not a complete sentence]\n\n"
+            "Only give me the reply according to this format, don't give me any other words. "
+            "Please make sure to analyze step by step before giving the answer."
+            ,
+    "sciknoweval" : 
+            "Read the question, analyze step by step and provide your answer. "
+            "Use the following format to answer:\n"
+            "Explanation: [insert step-by-step analysis here]\n"
+            "Answer: [ONLY the A/B/C/D...; not a complete sentence]\n\n"
+            "Only give me the reply according to this format, don't give me any other words. "
+            "Please make sure to analyze step by step before giving the answer."
+            ,
+    "scieval" :
+            "Read the question, analyze step by step and provide your answer. "
+            "Use the following format to answer:\n"
+            "Explanation: [insert step-by-step analysis here]\n"
+            "Answer: [ONLY the final answer; not a complete sentence]\n\n"
+            "Only give me the reply according to this format, don't give me any other words. "
+            "Please make sure to analyze step by step before giving the answer."
+            ,
+    "numina_math" :
+            "Read the question, analyze step by step and provide your answer. "
+            "Use the following format to answer:\n"
+            "Explanation: [insert step-by-step analysis here]\n"
+            "Answer: [ONLY the numerical number be enclosed within \\boxed{}; not a complete sentence]\n\n"
+            "Only give me the reply according to this format, don't give me any other words. "
+            "Please make sure to analyze step by step before giving the answer."
+            ,
+    "logicnli" :
+            "Please determine whether the hypothesis is entailment/neutral/self_contradiction/self-contradiction/contradiction "
+            "based on these premises. Read the question, analyze step by step and provide your answer. "
+            "Use the following format to answer:\n"
+            "Explanation: [insert step-by-step analysis here]\n"
+            "Answer: [ONLY the entailment/neutral/self_contradiction/self-contradiction/contradiction; not a complete sentence]\n\n"
+            "Only give me the reply according to this format, don't give me any other words. "
+            "Please make sure to analyze step by step and give me your evidence before giving the answer."
+            ,
+}
 
-def extract_solution(solution_str):
+def convert_to_dataset_type(dataset_name: str) -> str:
     """
-    Extract answer for LogicNLI datasets.
+    Convert dataset name to a standardized dataset type.
+    
+    Args:
+        dataset_name (str): The name of the dataset.
+        
+    Returns:
+        str: The standardized dataset type.
     """
-    match = re.findall(r'\b(entailment|neutral|contradiction|self_contradiction|self-contradiction)\b', 
-                        solution_str, re.IGNORECASE)
-    if match:
-        return match[-1].lower()
-    return "unmatched"
+    print("dataset_name:", dataset_name)
+    if "logicnli" in dataset_name.lower():
+        return "logicnli"
+    elif "scieval" in dataset_name.lower():
+        return "scieval"
+    elif "numinamath" in dataset_name.lower():
+        return "numina_math"
+    elif "logiqa" in dataset_name.lower():
+        return "logiqa"
+    elif "sciknoweval" in dataset_name.lower():
+        return "sciknoweval"
+    else:
+        return "unknown dataset type"
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--local_dir", default="/fs-computility/ai-shen/yangxuqing/C2RM/data_C2RM/q/qwen7b/all_correct/")
-    parser.add_argument("--hdfs_dir", default=None)
+    parser.add_argument("local_dir", nargs="?", default="/fs-computility/ai-shen/yangxuqing/C2RM/data_C2RM/q/qwen7b/")
+    parser.add_argument("local_train_file", nargs="?", default="combined_tagged.jsonl")
+    parser.add_argument("local_test_file", nargs="?", default="combined_tagged.jsonl")
+    parser.add_argument("hdfs_dir", nargs="?", default=None)
 
     args = parser.parse_args()
 
     local_dir = args.local_dir
+    local_train_file = args.local_train_file
+    local_test_file = args.local_test_file
     hdfs_dir = args.hdfs_dir
 
     data_source = "C2RM"
@@ -40,22 +100,16 @@ if __name__ == "__main__":
     dataset = datasets.load_dataset(
         'json',
         data_files={
-            'train': os.path.join(local_dir, 'logic_matched-mini.jsonl'),
-            'test': os.path.join(local_dir, 'logic_matched-mini.jsonl')
+            'train': os.path.join(local_dir, local_train_file),
+            'test': os.path.join(local_dir, local_test_file)
         }
     )
 
     train_dataset = dataset["train"]
     test_dataset = dataset["test"]
 
-    instruction_following = " Based on your answer, please attach an inconfidence signal ranging from 1-10 to specify whether you are unknown about your answer. 1 means you are totally known (strong confidence), while 10 means you are totally unknown (strong inconfidence). If you need more information to answer the question, please attach 10. We will compare your answer with the ground truth to check the correctness. If your answer is correct and accompanied by strong confidence, you will be rewarded; if your answer is incorrect but assigned strong confidence, you will be punished. The signal should be in the format of <INCONFIDENCE:NUMBER>, where NUMBER ranges from 1 to 10, directly appended to your answer.\
-                            Please determine whether the hypothesis is entailment/neutral/self_contradiction/self-contradiction/contradiction \
-                            based on these premises. Read the question, analyze step by step and provide your answer. \
-                            Use the following format to answer:\n \
-                            Explanation: [insert step-by-step analysis here]\n \
-                            Answer: [ONLY the entailment/neutral/self_contradiction/self-contradiction/contradiction; not a complete sentence]\n\n \
-                            Only give me the reply according to this format, don't give me any other words. \
-                            Please make sure to analyze step by step and give me your evidence before giving the answer."
+    confidence_prompt = "Based on your answer, please attach a confidence signal ranging from 1-10 to specify whether you are unknown about your answer. 1 means you are totally unknown (strong inconfidence), while 10 means you are totally known (strong confidence). If you need more information to answer the question, please attach 1. We will compare your answer with the ground truth to check the correctness. If your answer is correct and accompanied by strong confidence, you will be rewarded; if your answer is incorrect but assigned strong confidence, you will be punished. The signal should be in the format of <CONFIDENCE:NUMBER>, where NUMBER ranges from 1 to 10, directly appended to your answer.\n"
+                            
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
@@ -63,16 +117,21 @@ if __name__ == "__main__":
             question = example.pop("question")
             solution = example.pop("answer")
             reference_tag = example.pop("reference_tag", None)
+            dataset_str = example.pop("dataset", None)
+            dataset_type = convert_to_dataset_type(dataset_str)
+            dataset_prompt = dataset_prompt_dict.get(dataset_type, None)
+            if dataset_prompt is None:
+                raise ValueError(f"Dataset {dataset_str} is not supported or not found in dataset_prompt_dict.")
 
-            question = question + " " + instruction_following
+            question =  dataset_prompt + "\n\n"+ question + "\n\n" + confidence_prompt + "\n " 
 
-            ground_truth = extract_solution(solution)
+            ground_truth = solution
             data = {
                 "data_source": data_source,
                 "prompt": [{"role": "user", "content": question}],
-                "ability": "logic",
+                "ability": dataset_str,
                 "reward_model": {"style": "rule", "ground_truth": ground_truth},
-                "extra_info": {"split": split, "index": idx, "reference_tag": reference_tag},
+                "extra_info": {"split": split, "index": idx, "reference_tag": reference_tag, "dataset": dataset_str},
             }
             # print("data is:\n", data, "\n")
             return data
