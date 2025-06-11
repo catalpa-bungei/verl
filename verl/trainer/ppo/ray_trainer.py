@@ -658,6 +658,13 @@ class RayPPOTrainer:
                 reward_extra_infos_dict=reward_extra_infos_dict,
                 dump_path=val_data_dir,
             )
+        # Xuqing's Note:
+        # reward_extra_info is a dictionary that stores additional information
+        # e.g., reward_extra_info = {
+        #     "score": [0.8, 0.9, ...],
+        #     "confidence_level": [0.95, 0.9, ...],
+        #     "known_correct_tag": ["known_correct", "known_incorrect", ...],
+        #     "reference_tag": ["all_correct", "some_correct", ...],}
 
         for key_info, lst in reward_extra_infos_dict.items():
             assert len(lst) == 0 or len(lst) == len(sample_scores), f"{key_info}: {len(lst)=}, {len(sample_scores)=}"
@@ -677,6 +684,56 @@ class RayPPOTrainer:
                         metric_sec = "val-aux"
                     pfx = f"{metric_sec}/{data_source}/{var_name}/{metric_name}"
                     metric_dict[pfx] = metric_val
+        
+        # calculate the ratio of all_correct_known_correct, all_correct_known_incorrect, all_correct_unknown_correct and all_correct_unknown_incorrect
+        # and all_wrong_known_correct, all_wrong_known_incorrect, all_wrong_unknown_correct and all_wrong_unknown_incorrect
+        # and partial_correct_known_correct, partial_correct_known_incorrect, partial_correct_unknown_correct and partial_correct_unknown_incorrect
+        # and unmatched_known
+        if "known_correct_tag" in reward_extra_infos_dict:
+            all_correct_known_correct = reward_extra_infos_dict["known_correct_tag"].count("all_correct -> known_correct")
+            all_correct_known_incorrect = reward_extra_infos_dict["known_correct_tag"].count("all_correct -> known_incorrect")
+            all_correct_unknown_correct = reward_extra_infos_dict["known_correct_tag"].count("all_correct -> unknown_correct")
+            all_correct_unknown_incorrect = reward_extra_infos_dict["known_correct_tag"].count("all_correct -> unknown_incorrect")
+            all_wrong_known_correct = reward_extra_infos_dict["known_correct_tag"].count("all_wrong -> known_correct")
+            all_wrong_known_incorrect = reward_extra_infos_dict["known_correct_tag"].count("all_wrong -> known_incorrect")
+            all_wrong_unknown_correct = reward_extra_infos_dict["known_correct_tag"].count("all_wrong -> unknown_correct")
+            all_wrong_unknown_incorrect = reward_extra_infos_dict["known_correct_tag"].count("all_wrong -> unknown_incorrect")
+            partial_correct_known_correct = reward_extra_infos_dict["known_correct_tag"].count("partial_correct -> known_correct")
+            partial_correct_known_incorrect = reward_extra_infos_dict["known_correct_tag"].count("partial_correct -> known_incorrect")
+            partial_correct_unknown_correct = reward_extra_infos_dict["known_correct_tag"].count("partial_correct -> unknown_correct")
+            partial_correct_unknown_incorrect = reward_extra_infos_dict["known_correct_tag"].count("partial_correct -> unknown_incorrect")
+            unmatched_known = reward_extra_infos_dict["known_correct_tag"].count("unmatched_known")
+
+            total = all_correct_known_correct + all_correct_known_incorrect + all_correct_unknown_correct + all_correct_unknown_incorrect + \
+                all_wrong_known_correct + all_wrong_known_incorrect + all_wrong_unknown_correct + all_wrong_unknown_incorrect + \
+                partial_correct_known_correct + partial_correct_known_incorrect + partial_correct_unknown_correct + partial_correct_unknown_incorrect + \
+                unmatched_known
+
+            known_correct = all_correct_known_correct + all_wrong_known_correct + partial_correct_known_correct
+            known_incorrect = all_correct_known_incorrect + all_wrong_known_incorrect + partial_correct_known_incorrect
+            unknown_correct = all_correct_unknown_correct + all_wrong_unknown_correct + partial_correct_unknown_correct
+            unknown_incorrect = all_correct_unknown_incorrect + all_wrong_unknown_incorrect + partial_correct_unknown_incorrect
+            if total > 0:
+                metric_dict["val-core/known_correct_ratio"] = known_correct / total
+                metric_dict["val-core/known_incorrect_ratio"] = known_incorrect / total
+                metric_dict["val-core/unknown_correct_ratio"] = unknown_correct / total
+                metric_dict["val-core/unknown_incorrect_ratio"] = unknown_incorrect / total
+                metric_dict["val-core/unmatched_known_ratio"] = unmatched_known / total
+                metric_dict["val-aux/all_correct -> known_correct_ratio"] = all_correct_known_correct / total
+                metric_dict["val-aux/all_correct -> known_incorrect_ratio"] = all_correct_known_incorrect / total
+                metric_dict["val-aux/all_correct -> unknown_correct_ratio"] = all_correct_unknown_correct / total
+                metric_dict["val-aux/all_correct -> unknown_incorrect_ratio"] = all_correct_unknown_incorrect / total
+                metric_dict["val-aux/all_wrong -> known_correct_ratio"] = all_wrong_known_correct / total
+                metric_dict["val-aux/all_wrong -> known_incorrect_ratio"] = all_wrong_known_incorrect / total
+                metric_dict["val-aux/all_wrong -> unknown_correct_ratio"] = all_wrong_unknown_correct / total
+                metric_dict["val-aux/all_wrong -> unknown_incorrect_ratio"] = all_wrong_unknown_incorrect / total
+                metric_dict["val-aux/partial_correct -> known_correct_ratio"] = partial_correct_known_correct / total
+                metric_dict["val-aux/partial_correct -> known_incorrect_ratio"] = partial_correct_known_incorrect / total
+                metric_dict["val-aux/partial_correct -> unknown_correct_ratio"] = partial_correct_unknown_correct / total
+                metric_dict["val-aux/partial_correct -> unknown_incorrect_ratio"] = partial_correct_unknown_incorrect / total
+                metric_dict["val-aux/unmatched_known_ratio"] = unmatched_known / total
+        else: 
+            print("Warning: 'known_correct_tag' not found in reward_extra_infos_dict, skipping known tag ratio calculation.")
 
         return metric_dict
 
@@ -967,6 +1024,13 @@ class RayPPOTrainer:
                             future_reward = compute_reward_async.remote(batch, self.config, self.tokenizer)
                         else:
                             reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
+                            # Xuqing's Note:
+                            # reward_extra_info is a dictionary that stores additional information
+                            # e.g., reward_extra_info = {
+                            #     "score": [0.8, 0.9, ...],
+                            #     "confidence_level": [0.95, 0.9, ...],
+                            #     "known_correct_tag": ["known_correct", "known_incorrect", ...],
+                            #     "reference_tag": ["all_correct", "some_correct", ...],}
 
                     # recompute old_log_probs
                     with _timer("old_log_prob", timing_raw):

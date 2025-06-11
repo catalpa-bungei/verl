@@ -80,9 +80,18 @@ class NaiveRewardManager:
                 # Store the information including original reward
                 for key, value in score.items():
                     reward_extra_info[key].append(value)
+                # Xuqing's Note:
+                # reward_extra_info is a dictionary that stores additional information
+                # e.g., reward_extra_info = {
+                #     "score": [0.8, 0.9, ...],
+                #     "confidence_level": [0.95, 0.9, ...],
+                #     "known_correct_tag": ["known_correct", "known_incorrect", ...],
+                #     "reference_tag": ["all_correct", "some_correct", ...],}
             else:
                 reward = score
+            print(f"reward: {reward}")
 
+            # Xuqing's Note: reward tensor is a tensor instead of a list
             reward_tensor[i, valid_response_length - 1] = reward
 
             if data_source not in already_print_data_sources:

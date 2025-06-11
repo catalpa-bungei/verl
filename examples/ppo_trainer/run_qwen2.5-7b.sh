@@ -53,13 +53,13 @@ python3 -m verl.trainer.main_ppo \
     critic.ppo_micro_batch_size_per_gpu=4 \
     critic.model.fsdp_config.param_offload=False \
     critic.model.fsdp_config.optimizer_offload=False \
-    custom_reward_function.path=/fs-computility/ai-shen/yangxuqing/verl/verl/utils/reward_score/c2rm_reward.py\
+    custom_reward_function.path=/fs-computility/ai-shen/yangxuqing/verl/verl/utils/reward_score/c2rm_reward.py \
     custom_reward_function.name=compute_score_reference_data \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_example_qwen2.5-7b-batch1024-c2rm-mini' \
-    trainer.experiment_name='Qwen2.5-7B-Instruct_function_rm_1024-c2rm-mini' \
+    trainer.experiment_name='Qwen2.5-7B-Instruct_function_rm_1024-c2rm-mini-correctlogiqa' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=20 \

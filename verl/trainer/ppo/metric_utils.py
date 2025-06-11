@@ -362,6 +362,14 @@ def process_validation_metrics(data_sources: list[str], sample_inputs: list[str]
         >>> result = process_validation_metrics(data_sources, sample_inputs, infos_dict)
         >>> # result will contain statistics for each data source and variable
     """
+    # Xuqing's Note:
+    # reward_extra_info is a dictionary that stores additional information
+    # e.g., reward_extra_info = {
+    #     "score": [0.8, 0.9, ...],
+    #     "confidence_level": [0.95, 0.9, ...],
+    #     "known_correct_tag": ["known_correct", "known_incorrect", ...],
+    #     "reference_tag": ["all_correct", "some_correct", ...],}
+
     # Group metrics by data source, prompt and variable
     data_src2prompt2var2vals = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     for sample_idx, data_source in enumerate(data_sources):
@@ -375,6 +383,8 @@ def process_validation_metrics(data_sources: list[str], sample_inputs: list[str]
     for data_source, prompt2var2vals in data_src2prompt2var2vals.items():
         for prompt, var2vals in prompt2var2vals.items():
             for var_name, var_vals in var2vals.items():
+                # print("var_name:", var_name)
+                # print("var_vals:", var_vals)
                 if isinstance(var_vals[0], str):
                     continue
 

@@ -65,7 +65,7 @@ def convert_to_dataset_type(dataset_name: str) -> str:
     Returns:
         str: The standardized dataset type.
     """
-    print("dataset_name:", dataset_name)
+    # print("dataset_name:", dataset_name)
     if "logicnli" in dataset_name.lower():
         return "logicnli"
     elif "scieval" in dataset_name.lower():
@@ -79,12 +79,12 @@ def convert_to_dataset_type(dataset_name: str) -> str:
     else:
         return "unknown dataset type"
 
-
+# The user only needs to modify the local_dir, local_train_file, local_test_file, and parquet_file suffixes.
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("local_dir", nargs="?", default="/fs-computility/ai-shen/yangxuqing/C2RM/data_C2RM/q/qwen7b/")
-    parser.add_argument("local_train_file", nargs="?", default="combined_tagged.jsonl")
-    parser.add_argument("local_test_file", nargs="?", default="combined_tagged.jsonl")
+    parser.add_argument("local_train_file", nargs="?", default="combined_tagged_shuffled-train.jsonl")
+    parser.add_argument("local_test_file", nargs="?", default="combined_tagged_shuffled-test.jsonl")
     parser.add_argument("hdfs_dir", nargs="?", default=None)
 
     args = parser.parse_args()
@@ -93,6 +93,8 @@ if __name__ == "__main__":
     local_train_file = args.local_train_file
     local_test_file = args.local_test_file
     hdfs_dir = args.hdfs_dir
+    train_parquet_file = "train.parquet"
+    test_parquet_file = "test.parquet"
 
     data_source = "C2RM"
     # print(f"Loading the {data_source} dataset from huggingface...", flush=True)
@@ -108,7 +110,7 @@ if __name__ == "__main__":
     train_dataset = dataset["train"]
     test_dataset = dataset["test"]
 
-    confidence_prompt = "Based on your answer, please attach a confidence signal ranging from 1-10 to specify whether you are unknown about your answer. 1 means you are totally unknown (strong inconfidence), while 10 means you are totally known (strong confidence). If you need more information to answer the question, please attach 1. We will compare your answer with the ground truth to check the correctness. If your answer is correct and accompanied by strong confidence, you will be rewarded; if your answer is incorrect but assigned strong confidence, you will be punished. The signal should be in the format of <CONFIDENCE:NUMBER>, where NUMBER ranges from 1 to 10, directly appended to your answer.\n"
+    confidence_prompt = "Based on your answer, please attach a confidence signal ranging from 1-100 to specify whether you are unknown about your answer. 1 means you are totally unknown (strong inconfidence), while 100 means you are totally known (strong confidence). If you need more information to answer the question, please attach 1. We will compare your answer with the ground truth to check the correctness. If your answer is correct and accompanied by strong confidence, you will be rewarded; if your answer is incorrect but assigned strong confidence, you will be punished. The signal should be in the format of <CONFIDENCE:NUMBER>, where NUMBER ranges from 1 to 100, directly appended to your answer.\n"
                             
 
     # add a row to each data item that represents a unique id
@@ -142,8 +144,8 @@ if __name__ == "__main__":
     test_dataset = test_dataset.map(function=make_map_fn("test"), with_indices=True)
 
 
-    train_dataset.to_parquet(os.path.join(local_dir, "train-mini.parquet"))
-    test_dataset.to_parquet(os.path.join(local_dir, "test-mini.parquet"))
+    train_dataset.to_parquet(os.path.join(local_dir, train_parquet_file))
+    test_dataset.to_parquet(os.path.join(local_dir, test_parquet_file))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)

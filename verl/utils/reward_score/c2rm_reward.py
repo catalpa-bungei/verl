@@ -74,6 +74,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     Returns:
         float: The computed score.
     """
+    score = 0
     # print("solution_str:----------------------------------\n", solution_str,"\n")
     reference_tag = extra_info.get("reference_tag", "unmatched") if extra_info else "unmatched"
     dataset = extra_info.get("dataset", "unmatched") if extra_info else "unmatched"
@@ -94,55 +95,90 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     confidence_level = extract_confidence_level(solution_str)
     if confidence_level == "unmatched":
         known_signal = "unmatched"
-    elif confidence_level >=10:
+    elif confidence_level >= 90:
         known_signal = "known"
-    elif confidence_level <= 9:
+    elif confidence_level <= 89:
         known_signal = "unknown"
 
+    # print("solution_str:", solution_str,"\n")
     print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_tag:", reference_tag)
     
+    beta = 0.1
+    alpha = 0
+    eta = 0
+    known_correct_tag = ""
 
     if reference_tag == "all_correct":
         if known_signal == "known":
             if correctness == "correct":
-                return 1.1
+                score = 1 + beta
+                known_correct_tag = "all_correct -> known_correct"
             elif correctness == "incorrect":
-                return 0
+                score = 0.1 - beta - alpha
+                known_correct_tag = "all_correct -> known_incorrect"
         elif known_signal == "unknown":
             if correctness == "correct":
-                return 0.9
+                score =  1 - beta
+                known_correct_tag = "all_correct -> unknown_correct"
             elif correctness == "incorrect":
-                return 0.2
+                score =  0.1 + beta - alpha
+                known_correct_tag = "all_correct -> unknown_incorrect"
         else:
-            return 0
+            score =  0
+            known_correct_tag = "unmatched-known"
         
     elif reference_tag == "all_wrong":
         if known_signal == "known":
             if correctness == "correct":
-                return 1.2
+                score =  1 + beta + alpha
+                known_correct_tag = "all_wrong -> known_correct"
             elif correctness == "incorrect":
-                return 0.03
+                score =  0.1 - beta 
+                known_correct_tag = "all_wrong -> known_incorrect"
         elif known_signal == "unknown":
             if correctness == "correct":
-                return 0.98
+                score =  1 - beta + alpha
+                known_correct_tag = "all_wrong -> unknown_correct"
             elif correctness == "incorrect":
-                return 0.3
+                score =  0.1 + beta 
+                known_correct_tag = "all_wrong -> unknown_incorrect"
         else:
-            return 0
+            score =  0
+            known_correct_tag = "unmatched-known"
     
     elif reference_tag == "partial_correct":
         if known_signal == "known":
             if correctness == "correct":
-                return 1.15
+                score =  1 + beta + eta
+                known_correct_tag = "partial_correct -> known_correct"
             elif correctness == "incorrect":
-                return 0.07
+                score =  0.1 - beta - eta
+                known_correct_tag = "partial_correct -> known_incorrect"
         elif known_signal == "unknown":
             if correctness == "correct":
-                return 0.93
+                score =  1 - beta + eta
+                known_correct_tag = "partial_correct -> unknown_correct"
             elif correctness == "incorrect":
-                return 0.4
+                score =  0.1 + beta - eta
+                known_correct_tag = "partial_correct -> unknown_incorrect"
         else:
-            return 0
+            score =  0
+            known_correct_tag = "unmatched-known"
+
+    correctness_score = 1 if correctness == "correct" else 0
+    if confidence_level == "unmatched":
+        ece_score = 0
+    else:
+        ece_score = 1 - abs(correctness_score - confidence_level / 100.0)  # ECE score based on confidence level
+    # score = ece_score
+
+    # score = score - 0.5   # Normalize the score to be between -1 and 1
+    print("score:", score)
+    reward = {
+        "score": score,
+        "known_correct_tag": known_correct_tag,
+    }
+    return reward
 
         
 
