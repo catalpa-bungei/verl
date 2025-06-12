@@ -4,8 +4,8 @@ set -x
 ENGINE=${1:-vllm}
 export http_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
 export https_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
-c2rm_train_path=/fs-computility/ai-shen/yangxuqing/C2RM/data_C2RM/q/qwen7b/train.parquet
-c2rm_test_path=/fs-computility/ai-shen/yangxuqing/C2RM/data_C2RM/q/qwen7b/test.parquet
+c2rm_train_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/train.parquet
+c2rm_test_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/test.parquet
 train_files="['$c2rm_train_path']"
 test_files="['$c2rm_test_path']"
 
@@ -43,13 +43,13 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.n=5 \
     actor_rollout_ref.rollout.max_num_seqs=400 \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
-    custom_reward_function.path=/fs-computility/ai-shen/yangxuqing/verl/verl/utils/reward_score/c2rm_reward.py \
+    custom_reward_function.path=/fs-computility/wangxuhong/yangxuqing/verl/verl/utils/reward_score/c2rm_reward.py \
     custom_reward_function.name=compute_score_reference_data \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_grpo_c2rm-test0.01' \
-    trainer.experiment_name='qwen2_5_vl_7b_c2rm-beta0_alpha0_eta0' \
+    trainer.experiment_name='qwen2_5_vl_7b_c2rm-beta0.1_alpha0.05_eta0' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=20 \

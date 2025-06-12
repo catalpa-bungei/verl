@@ -103,8 +103,8 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     # print("solution_str:", solution_str,"\n")
     print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_tag:", reference_tag)
     
-    beta = 0
-    alpha = 0
+    beta = 0.1
+    alpha = 0.05
     eta = 0
     known_correct_tag = ""
     whether_ece = False
@@ -177,17 +177,17 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         if reference_tag == "all_correct":
             if known_signal == "known":
                 if correctness == "correct":
-                    score = ece_score
+                    score = 1 + ece_score
                     known_correct_tag = "all_correct -> known_correct"
                 elif correctness == "incorrect":
-                    score = ece_score - alpha
+                    score = 0.1 + ece_score - alpha
                     known_correct_tag = "all_correct -> known_incorrect"
             elif known_signal == "unknown":
                 if correctness == "correct":
-                    score =  ece_score
+                    score =  1 + ece_score
                     known_correct_tag = "all_correct -> unknown_correct"
                 elif correctness == "incorrect":
-                    score =  ece_score - alpha
+                    score =  0.1 + ece_score - alpha
                     known_correct_tag = "all_correct -> unknown_incorrect"
             else:
                 score =  0
@@ -196,17 +196,17 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         elif reference_tag == "all_wrong":
             if known_signal == "known":
                 if correctness == "correct":
-                    score =  ece_score + alpha
+                    score =  1 + ece_score + alpha
                     known_correct_tag = "all_wrong -> known_correct"
                 elif correctness == "incorrect":
-                    score =  ece_score
+                    score =  0.1 + ece_score
                     known_correct_tag = "all_wrong -> known_incorrect"
             elif known_signal == "unknown":
                 if correctness == "correct":
-                    score =  ece_score + alpha
+                    score =  1 + ece_score + alpha
                     known_correct_tag = "all_wrong -> unknown_correct"
                 elif correctness == "incorrect":
-                    score =  ece_score
+                    score =  0.1 + ece_score
                     known_correct_tag = "all_wrong -> unknown_incorrect"
             else:
                 score =  0
@@ -215,17 +215,17 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         elif reference_tag == "partial_correct":
             if known_signal == "known":
                 if correctness == "correct":
-                    score =  ece_score + eta
+                    score =  1 + ece_score + eta
                     known_correct_tag = "partial_correct -> known_correct"
                 elif correctness == "incorrect":
-                    score =  ece_score - eta
+                    score =  0.1 + ece_score - eta
                     known_correct_tag = "partial_correct -> known_incorrect"
             elif known_signal == "unknown":
                 if correctness == "correct":
-                    score =  ece_score + eta
+                    score =  1 + ece_score + eta
                     known_correct_tag = "partial_correct -> unknown_correct"
                 elif correctness == "incorrect":
-                    score =  ece_score - eta
+                    score =  0.1 + ece_score - eta
                     known_correct_tag = "partial_correct -> unknown_incorrect"
             else:
                 score =  0
