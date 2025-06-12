@@ -735,6 +735,26 @@ class RayPPOTrainer:
         else: 
             print("Warning: 'known_correct_tag' not found in reward_extra_infos_dict, skipping known tag ratio calculation.")
 
+        if "confidence_level" in reward_extra_infos_dict:
+            # calculate the ratio of confidence level
+            confidence_levels = reward_extra_infos_dict["confidence_level"]
+            total = len(confidence_levels)
+            # confidence_levels includes int and str "unmatched"; count the number of int
+            int_confidence_levels = [x for x in confidence_levels if isinstance(x, int)]
+            unmatched_count = confidence_levels.count("unmatched")
+            average_confidence = sum(int_confidence_levels) / len(int_confidence_levels) if int_confidence_levels else -1
+            metric_dict["val-core/average_confidence_level"] = average_confidence
+            metric_dict["val-aux/unmatched_confidence_ratio"] = unmatched_count / total if total > 0 else -1
+
+        if "correctness" in reward_extra_infos_dict:
+            # calculate the ratio of correctness
+            correctness = reward_extra_infos_dict["correctness"]
+            total = len(correctness)
+            correct_count = correctness.count("correct")
+            incorrect_count = correctness.count("incorrect")
+            metric_dict["val-core/correctness_ratio"] = correct_count / total if total > 0 else -1
+            metric_dict["val-aux/incorrectness_ratio"] = incorrect_count / total if total > 0 else -1
+
         return metric_dict
 
     def init_workers(self):
@@ -1134,6 +1154,73 @@ class RayPPOTrainer:
                             self._save_checkpoint()
 
                 # training metrics
+                if "known_correct_tag" in reward_extra_infos_dict:
+                    all_correct_known_correct = reward_extra_infos_dict["known_correct_tag"].count("all_correct -> known_correct")
+                    all_correct_known_incorrect = reward_extra_infos_dict["known_correct_tag"].count("all_correct -> known_incorrect")
+                    all_correct_unknown_correct = reward_extra_infos_dict["known_correct_tag"].count("all_correct -> unknown_correct")
+                    all_correct_unknown_incorrect = reward_extra_infos_dict["known_correct_tag"].count("all_correct -> unknown_incorrect")
+                    all_wrong_known_correct = reward_extra_infos_dict["known_correct_tag"].count("all_wrong -> known_correct")
+                    all_wrong_known_incorrect = reward_extra_infos_dict["known_correct_tag"].count("all_wrong -> known_incorrect")
+                    all_wrong_unknown_correct = reward_extra_infos_dict["known_correct_tag"].count("all_wrong -> unknown_correct")
+                    all_wrong_unknown_incorrect = reward_extra_infos_dict["known_correct_tag"].count("all_wrong -> unknown_incorrect")
+                    partial_correct_known_correct = reward_extra_infos_dict["known_correct_tag"].count("partial_correct -> known_correct")
+                    partial_correct_known_incorrect = reward_extra_infos_dict["known_correct_tag"].count("partial_correct -> known_incorrect")
+                    partial_correct_unknown_correct = reward_extra_infos_dict["known_correct_tag"].count("partial_correct -> unknown_correct")
+                    partial_correct_unknown_incorrect = reward_extra_infos_dict["known_correct_tag"].count("partial_correct -> unknown_incorrect")
+                    unmatched_known = reward_extra_infos_dict["known_correct_tag"].count("unmatched_known")
+
+                    total = all_correct_known_correct + all_correct_known_incorrect + all_correct_unknown_correct + all_correct_unknown_incorrect + \
+                        all_wrong_known_correct + all_wrong_known_incorrect + all_wrong_unknown_correct + all_wrong_unknown_incorrect + \
+                        partial_correct_known_correct + partial_correct_known_incorrect + partial_correct_unknown_correct + partial_correct_unknown_incorrect + \
+                        unmatched_known
+
+                    known_correct = all_correct_known_correct + all_wrong_known_correct + partial_correct_known_correct
+                    known_incorrect = all_correct_known_incorrect + all_wrong_known_incorrect + partial_correct_known_incorrect
+                    unknown_correct = all_correct_unknown_correct + all_wrong_unknown_correct + partial_correct_unknown_correct
+                    unknown_incorrect = all_correct_unknown_incorrect + all_wrong_unknown_incorrect + partial_correct_unknown_incorrect
+
+                    if total > 0:
+                        metrics["training/known_correct_ratio"] = known_correct / total
+                        metrics["training/known_incorrect_ratio"] = known_incorrect / total
+                        metrics["training/unknown_correct_ratio"] = unknown_correct / total
+                        metrics["training/unknown_incorrect_ratio"] = unknown_incorrect / total
+                        metrics["training/unmatched_known_ratio"] = unmatched_known / total
+                        metrics["training/all_correct -> known_correct_ratio"] = all_correct_known_correct / total
+                        metrics["training/all_correct -> known_incorrect_ratio"] = all_correct_known_incorrect / total
+                        metrics["training/all_correct -> unknown_correct_ratio"] = all_correct_unknown_correct / total
+                        metrics["training/all_correct -> unknown_incorrect_ratio"] = all_correct_unknown_incorrect / total
+                        metrics["training/all_wrong -> known_correct_ratio"] = all_wrong_known_correct / total
+                        metrics["training/all_wrong -> known_incorrect_ratio"] = all_wrong_known_incorrect / total
+                        metrics["training/all_wrong -> unknown_correct_ratio"] = all_wrong_unknown_correct / total
+                        metrics["training/all_wrong -> unknown_incorrect_ratio"] = all_wrong_unknown_incorrect / total
+                        metrics["training/partial_correct -> known_correct_ratio"] = partial_correct_known_correct / total
+                        metrics["training/partial_correct -> known_incorrect_ratio"] = partial_correct_known_incorrect / total
+                        metrics["training/partial_correct -> unknown_correct_ratio"] = partial_correct_unknown_correct / total
+                        metrics["training/partial_correct -> unknown_incorrect_ratio"] = partial_correct_unknown_incorrect / total
+                        metrics["training/unmatched_known_ratio"] = unmatched_known / total
+
+                else:
+                    print("Warning: 'known_correct_tag' not found in reward_extra_infos_dict, skipping known tag ratio calculation.")
+                if "confidence_level" in reward_extra_infos_dict:
+                    # calculate the ratio of confidence level
+                    confidence_levels = reward_extra_infos_dict["confidence_level"]
+                    total = len(confidence_levels)
+                    # confidence_levels includes int and str "unmatched"; count the number of int
+                    int_confidence_levels = [x for x in confidence_levels if isinstance(x, int)]
+                    unmatched_count = confidence_levels.count("unmatched")
+                    average_confidence = sum(int_confidence_levels) / len(int_confidence_levels) if int_confidence_levels else -1
+                    metrics["training/average_confidence_level"] = average_confidence
+                    metrics["training/unmatched_confidence_ratio"] = unmatched_count / total if total > 0 else -1
+                if "correctness" in reward_extra_infos_dict:
+                    # calculate the ratio of correctness
+                    correctness = reward_extra_infos_dict["correctness"]
+                    total = len(correctness)
+                    correct_count = correctness.count("correct")
+                    incorrect_count = correctness.count("incorrect")
+                    metrics["training/correctness_ratio"] = correct_count / total if total > 0 else -1
+                    metrics["training/incorrectness_ratio"] = incorrect_count / total if total > 0 else -1
+                    
+                
                 metrics.update(
                     {
                         "training/global_step": self.global_steps,

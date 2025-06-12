@@ -103,10 +103,11 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     # print("solution_str:", solution_str,"\n")
     print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_tag:", reference_tag)
     
-    beta = 0.1
+    beta = 0
     alpha = 0
     eta = 0
     known_correct_tag = ""
+    whether_ece = False
 
     if reference_tag == "all_correct":
         if known_signal == "known":
@@ -165,18 +166,78 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
             score =  0
             known_correct_tag = "unmatched-known"
 
+    # Use ECE as the base score
     correctness_score = 1 if correctness == "correct" else 0
     if confidence_level == "unmatched":
         ece_score = 0
     else:
         ece_score = 1 - abs(correctness_score - confidence_level / 100.0)  # ECE score based on confidence level
-    # score = ece_score
+
+    if whether_ece:
+        if reference_tag == "all_correct":
+            if known_signal == "known":
+                if correctness == "correct":
+                    score = ece_score
+                    known_correct_tag = "all_correct -> known_correct"
+                elif correctness == "incorrect":
+                    score = ece_score - alpha
+                    known_correct_tag = "all_correct -> known_incorrect"
+            elif known_signal == "unknown":
+                if correctness == "correct":
+                    score =  ece_score
+                    known_correct_tag = "all_correct -> unknown_correct"
+                elif correctness == "incorrect":
+                    score =  ece_score - alpha
+                    known_correct_tag = "all_correct -> unknown_incorrect"
+            else:
+                score =  0
+                known_correct_tag = "unmatched-known"
+            
+        elif reference_tag == "all_wrong":
+            if known_signal == "known":
+                if correctness == "correct":
+                    score =  ece_score + alpha
+                    known_correct_tag = "all_wrong -> known_correct"
+                elif correctness == "incorrect":
+                    score =  ece_score
+                    known_correct_tag = "all_wrong -> known_incorrect"
+            elif known_signal == "unknown":
+                if correctness == "correct":
+                    score =  ece_score + alpha
+                    known_correct_tag = "all_wrong -> unknown_correct"
+                elif correctness == "incorrect":
+                    score =  ece_score
+                    known_correct_tag = "all_wrong -> unknown_incorrect"
+            else:
+                score =  0
+                known_correct_tag = "unmatched-known"
+        
+        elif reference_tag == "partial_correct":
+            if known_signal == "known":
+                if correctness == "correct":
+                    score =  ece_score + eta
+                    known_correct_tag = "partial_correct -> known_correct"
+                elif correctness == "incorrect":
+                    score =  ece_score - eta
+                    known_correct_tag = "partial_correct -> known_incorrect"
+            elif known_signal == "unknown":
+                if correctness == "correct":
+                    score =  ece_score + eta
+                    known_correct_tag = "partial_correct -> unknown_correct"
+                elif correctness == "incorrect":
+                    score =  ece_score - eta
+                    known_correct_tag = "partial_correct -> unknown_incorrect"
+            else:
+                score =  0
+                known_correct_tag = "unmatched-known"
 
     # score = score - 0.5   # Normalize the score to be between -1 and 1
-    print("score:", score)
+    # print("score:", score)
     reward = {
         "score": score,
         "known_correct_tag": known_correct_tag,
+        "confidence_level": confidence_level,
+        "correctness": correctness,
     }
     return reward
 

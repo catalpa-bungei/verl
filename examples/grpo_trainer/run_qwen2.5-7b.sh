@@ -14,8 +14,8 @@ python3 -m verl.trainer.main_ppo \
     algorithm.kl_ctrl.kl_coef=0.001 \
     data.train_files="$train_files" \
     data.val_files="$test_files" \
-    data.train_batch_size=512 \
-    data.val_batch_size=512 \
+    data.train_batch_size=1024 \
+    data.val_batch_size=1024 \
     data.max_prompt_length=2048 \
     data.max_response_length=2048 \
     data.filter_overlong_prompts=True \
@@ -48,8 +48,8 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='verl_grpo_c2rm-display' \
-    trainer.experiment_name='qwen2_5_vl_7b_c2rm-beta0.1-alpha0-eta0' \
+    trainer.project_name='verl_grpo_c2rm-test0.01' \
+    trainer.experiment_name='qwen2_5_vl_7b_c2rm-beta0_alpha0_eta0' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=20 \

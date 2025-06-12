@@ -385,6 +385,9 @@ def process_validation_metrics(data_sources: list[str], sample_inputs: list[str]
             for var_name, var_vals in var2vals.items():
                 # print("var_name:", var_name)
                 # print("var_vals:", var_vals)
+                if var_name == "confidence_level":
+                    # Skip confidence level as it is not a metric to be aggregated
+                    continue
                 if isinstance(var_vals[0], str):
                     continue
 
