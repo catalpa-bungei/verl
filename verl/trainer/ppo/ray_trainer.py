@@ -754,6 +754,9 @@ class RayPPOTrainer:
             incorrect_count = correctness.count("incorrect")
             metric_dict["val-core/correctness_ratio"] = correct_count / total if total > 0 else -1
             metric_dict["val-aux/incorrectness_ratio"] = incorrect_count / total if total > 0 else -1
+        
+        if "unique_confidence_ratio" in reward_extra_infos_dict:
+            metric_dict["val-core/latest_unique_confidence_ratio"] = reward_extra_infos_dict["unique_confidence_ratio"][-1] if reward_extra_infos_dict["unique_confidence_ratio"] else -1
 
         return metric_dict
 
@@ -1180,10 +1183,10 @@ class RayPPOTrainer:
                     unknown_incorrect = all_correct_unknown_incorrect + all_wrong_unknown_incorrect + partial_correct_unknown_incorrect
 
                     if total > 0:
-                        metrics["training/known_correct_ratio"] = known_correct / total
-                        metrics["training/known_incorrect_ratio"] = known_incorrect / total
-                        metrics["training/unknown_correct_ratio"] = unknown_correct / total
-                        metrics["training/unknown_incorrect_ratio"] = unknown_incorrect / total
+                        metrics["training-core/known_correct_ratio"] = known_correct / total
+                        metrics["training-core/known_incorrect_ratio"] = known_incorrect / total
+                        metrics["training-core/unknown_correct_ratio"] = unknown_correct / total
+                        metrics["training-core/unknown_incorrect_ratio"] = unknown_incorrect / total
                         metrics["training/unmatched_known_ratio"] = unmatched_known / total
                         metrics["training/all_correct -> known_correct_ratio"] = all_correct_known_correct / total
                         metrics["training/all_correct -> known_incorrect_ratio"] = all_correct_known_incorrect / total
@@ -1209,16 +1212,19 @@ class RayPPOTrainer:
                     int_confidence_levels = [x for x in confidence_levels if isinstance(x, int)]
                     unmatched_count = confidence_levels.count("unmatched")
                     average_confidence = sum(int_confidence_levels) / len(int_confidence_levels) if int_confidence_levels else -1
-                    metrics["training/average_confidence_level"] = average_confidence
-                    metrics["training/unmatched_confidence_ratio"] = unmatched_count / total if total > 0 else -1
+                    metrics["training-core/average_confidence_level"] = average_confidence
+                    metrics["training-core/unmatched_confidence_ratio"] = unmatched_count / total if total > 0 else -1
                 if "correctness" in reward_extra_infos_dict:
                     # calculate the ratio of correctness
                     correctness = reward_extra_infos_dict["correctness"]
                     total = len(correctness)
                     correct_count = correctness.count("correct")
                     incorrect_count = correctness.count("incorrect")
-                    metrics["training/correctness_ratio"] = correct_count / total if total > 0 else -1
-                    metrics["training/incorrectness_ratio"] = incorrect_count / total if total > 0 else -1
+                    metrics["training-core/correctness_ratio"] = correct_count / total if total > 0 else -1
+                    metrics["training-core/incorrectness_ratio"] = incorrect_count / total if total > 0 else -1
+
+                if "unique_confidence_ratio" in reward_extra_infos_dict:
+                    metrics["training-core/latest_unique_confidence_ratio"] = reward_extra_infos_dict["unique_confidence_ratio"][-1] if reward_extra_infos_dict["unique_confidence_ratio"] else -1
                     
                 
                 metrics.update(

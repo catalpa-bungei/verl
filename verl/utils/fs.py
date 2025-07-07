@@ -113,6 +113,7 @@ def copy_local_path_from_hdfs(src: str, cache_dir=None, filelock=".file.lock", v
 
     assert src[-1] != "/", f"Make sure the last char in src is not / because it will cause error. Got {src}"
 
+    print("This is fs.py copy_local_path_from_hdfs, src is: ", src)
     if is_non_local(src):
         # download from hdfs to local
         if cache_dir is None:

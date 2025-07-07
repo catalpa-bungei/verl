@@ -156,6 +156,7 @@ class vLLMRollout(BaseRollout):
 
         print(f"kwargs: {kwargs}")
         self.sampling_params = SamplingParams(**kwargs)
+        print("This is vllm_rollout.py, sampling_params:", self.sampling_params)
 
         self.pad_token_id = tokenizer.pad_token_id
 
@@ -217,6 +218,7 @@ class vLLMRollout(BaseRollout):
                 "n": 1,  # if validate, already repeat in ray_trainer
             }
 
+        print("This is vllm_rollout.py generate_sequences, sampling_params:", self.sampling_params)
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
             output = self.inference_engine.generate(

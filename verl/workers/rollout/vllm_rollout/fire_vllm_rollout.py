@@ -139,6 +139,7 @@ class FIREvLLMRollout(vLLMRollout):
                 "n": 1,  # if greedy, only 1 response
             }
 
+        print("This is fire_vllm_rollout.py generate_sequences, sampling_params:", self.sampling_params)
         if not self.use_fire_sampling:
             # users can customize different sampling_params at different run
             with self.update_sampling_params(**kwargs):

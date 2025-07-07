@@ -270,6 +270,7 @@ class vLLMRollout(BaseRollout):
                 "n": 1,  # if validate, already repeat in ray_trainer
             }
 
+        print("This is vllm_rollout_spmd.py generate_sequences, sampling_params:", self.sampling_params)
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
             outputs = self.inference_engine.generate(

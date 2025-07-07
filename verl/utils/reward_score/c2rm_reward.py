@@ -62,6 +62,9 @@ def extract_c2rm_answer(dataset_type, model_output: str) -> Optional[str]:
     extractor = c2rm_answer_extraction.AnswerExtractor(dataset_type=dataset_type, responses_per_question=5)
     return extractor.extract_answer(model_output)
 
+global confidence_levels
+confidence_levels = []
+
 def compute_score_reference_data(data_source, solution_str, ground_truth, extra_info=None):
     """
     Compute the score based on known correctness and reference data correctness.
@@ -92,37 +95,59 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     else:
         correctness = "incorrect"
     
+    range = 10  # Assuming the confidence level is between 1 and 10
     confidence_level = extract_confidence_level(solution_str)
+    confidence_levels.append(confidence_level)
+    if len(confidence_levels) > range:
+        confidence_levels.pop(0) # Limit the size of confidence_levels to 1000, doesn't create new list
+    confidence_levels_wo_unmatched = [cl for cl in confidence_levels if cl != "unmatched"]
+    avg_confidence = sum(confidence_levels_wo_unmatched) / len(confidence_levels_wo_unmatched) if confidence_levels_wo_unmatched else 0
+    confidence_variance = sum((cl - avg_confidence) ** 2 for cl in confidence_levels_wo_unmatched) / len(confidence_levels_wo_unmatched) if confidence_levels_wo_unmatched else 0
+    
+    unique_confidence_levels = set(confidence_levels)
+    number_of_unique_confidence_levels = len(unique_confidence_levels)
+    diversity = number_of_unique_confidence_levels / len(confidence_levels) if confidence_levels else 0
+    print("diversity:", diversity,  "| confidence_levels:", confidence_levels)
+
+    if range == 10:
+        threshold = 6
+    elif range == 100:
+        threshold = 51
+
     if confidence_level == "unmatched":
         known_signal = "unmatched"
-    elif confidence_level >= 90:
+    elif confidence_level >= threshold:
         known_signal = "known"
-    elif confidence_level <= 89:
+    elif confidence_level < threshold:
         known_signal = "unknown"
 
     # print("solution_str:", solution_str,"\n")
     print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_tag:", reference_tag)
     
     beta = 0.1
-    alpha = 0.05
+    alpha = 0.5
     eta = 0
+    w_ece = 0.1
+    w_diversity = 0
     known_correct_tag = ""
-    whether_ece = False
+    whether_ece = True
+
+    diversity_score = w_diversity * diversity  # Diversity score based on unique confidence levels
 
     if reference_tag == "all_correct":
         if known_signal == "known":
             if correctness == "correct":
-                score = 1 + beta
+                score = 1 + beta + diversity_score
                 known_correct_tag = "all_correct -> known_correct"
             elif correctness == "incorrect":
-                score = 0.1 - beta - alpha
+                score = 0.1 - beta - alpha + diversity_score
                 known_correct_tag = "all_correct -> known_incorrect"
         elif known_signal == "unknown":
             if correctness == "correct":
-                score =  1 - beta
+                score =  1 - beta + diversity_score
                 known_correct_tag = "all_correct -> unknown_correct"
             elif correctness == "incorrect":
-                score =  0.1 + beta - alpha
+                score =  0.1 + beta - alpha + diversity_score
                 known_correct_tag = "all_correct -> unknown_incorrect"
         else:
             score =  0
@@ -131,17 +156,17 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     elif reference_tag == "all_wrong":
         if known_signal == "known":
             if correctness == "correct":
-                score =  1 + beta + alpha
+                score =  1 + beta + alpha + diversity_score
                 known_correct_tag = "all_wrong -> known_correct"
             elif correctness == "incorrect":
-                score =  0.1 - beta 
+                score =  0.1 - beta + diversity_score
                 known_correct_tag = "all_wrong -> known_incorrect"
         elif known_signal == "unknown":
             if correctness == "correct":
-                score =  1 - beta + alpha
+                score =  1 - beta + alpha + diversity_score
                 known_correct_tag = "all_wrong -> unknown_correct"
             elif correctness == "incorrect":
-                score =  0.1 + beta 
+                score =  0.1 + beta + diversity_score
                 known_correct_tag = "all_wrong -> unknown_incorrect"
         else:
             score =  0
@@ -150,17 +175,17 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     elif reference_tag == "partial_correct":
         if known_signal == "known":
             if correctness == "correct":
-                score =  1 + beta + eta
+                score =  1 + beta + eta + diversity_score
                 known_correct_tag = "partial_correct -> known_correct"
             elif correctness == "incorrect":
-                score =  0.1 - beta - eta
+                score =  0.1 - beta - eta + diversity_score
                 known_correct_tag = "partial_correct -> known_incorrect"
         elif known_signal == "unknown":
             if correctness == "correct":
-                score =  1 - beta + eta
+                score =  1 - beta + eta + diversity_score
                 known_correct_tag = "partial_correct -> unknown_correct"
             elif correctness == "incorrect":
-                score =  0.1 + beta - eta
+                score =  0.1 + beta - eta + diversity_score
                 known_correct_tag = "partial_correct -> unknown_incorrect"
         else:
             score =  0
@@ -171,23 +196,24 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     if confidence_level == "unmatched":
         ece_score = 0
     else:
-        ece_score = 1 - abs(correctness_score - confidence_level / 100.0)  # ECE score based on confidence level
+        ece_score = 1 - abs(correctness_score - confidence_level / range)  # ECE score based on confidence level
+    ece_score = w_ece * ece_score
 
     if whether_ece:
         if reference_tag == "all_correct":
             if known_signal == "known":
                 if correctness == "correct":
-                    score = 1 + ece_score
+                    score = 1 + beta + ece_score + diversity_score
                     known_correct_tag = "all_correct -> known_correct"
                 elif correctness == "incorrect":
-                    score = 0.1 + ece_score - alpha
+                    score = 0.1 - beta + ece_score - alpha + diversity_score
                     known_correct_tag = "all_correct -> known_incorrect"
             elif known_signal == "unknown":
                 if correctness == "correct":
-                    score =  1 + ece_score
+                    score =  1 - beta + ece_score + diversity_score
                     known_correct_tag = "all_correct -> unknown_correct"
                 elif correctness == "incorrect":
-                    score =  0.1 + ece_score - alpha
+                    score =  0.1 + beta + ece_score - alpha + diversity_score
                     known_correct_tag = "all_correct -> unknown_incorrect"
             else:
                 score =  0
@@ -196,17 +222,17 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         elif reference_tag == "all_wrong":
             if known_signal == "known":
                 if correctness == "correct":
-                    score =  1 + ece_score + alpha
+                    score =  1 + beta + ece_score + alpha + diversity_score
                     known_correct_tag = "all_wrong -> known_correct"
                 elif correctness == "incorrect":
-                    score =  0.1 + ece_score
+                    score =  0.1 - beta + ece_score + diversity_score
                     known_correct_tag = "all_wrong -> known_incorrect"
             elif known_signal == "unknown":
                 if correctness == "correct":
-                    score =  1 + ece_score + alpha
+                    score =  1 - beta + ece_score + alpha + diversity_score
                     known_correct_tag = "all_wrong -> unknown_correct"
                 elif correctness == "incorrect":
-                    score =  0.1 + ece_score
+                    score =  0.1 + beta + ece_score + diversity_score
                     known_correct_tag = "all_wrong -> unknown_incorrect"
             else:
                 score =  0
@@ -215,17 +241,17 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         elif reference_tag == "partial_correct":
             if known_signal == "known":
                 if correctness == "correct":
-                    score =  1 + ece_score + eta
+                    score =  1 + beta + ece_score + eta + diversity_score
                     known_correct_tag = "partial_correct -> known_correct"
                 elif correctness == "incorrect":
-                    score =  0.1 + ece_score - eta
+                    score =  0.1 - beta + ece_score - eta + diversity_score
                     known_correct_tag = "partial_correct -> known_incorrect"
             elif known_signal == "unknown":
                 if correctness == "correct":
-                    score =  1 + ece_score + eta
+                    score =  1 - beta + ece_score + eta + diversity_score
                     known_correct_tag = "partial_correct -> unknown_correct"
                 elif correctness == "incorrect":
-                    score =  0.1 + ece_score - eta
+                    score =  0.1 + beta + ece_score - eta + diversity_score
                     known_correct_tag = "partial_correct -> unknown_incorrect"
             else:
                 score =  0
@@ -238,6 +264,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         "known_correct_tag": known_correct_tag,
         "confidence_level": confidence_level,
         "correctness": correctness,
+        "unique_confidence_ratio": diversity
     }
     return reward
 
