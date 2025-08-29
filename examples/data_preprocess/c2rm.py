@@ -18,7 +18,7 @@ dataset_prompt_dict = {
             "Explanation: [insert step-by-step analysis here]\n"
             "Answer: [ONLY the A/B/C/D...; not a complete sentence]\n\n"
             "Only give me the reply according to this format, don't give me any other words. "
-            "Please make sure to analyze step by step before giving the answer."
+            "Please make sure to analyze step by step before giving the answer." # no need to add "Question: " here, because it starts with "Background:"
             ,
     "sciknoweval" : 
             "Read the question, analyze step by step and provide your answer. "
@@ -27,6 +27,7 @@ dataset_prompt_dict = {
             "Answer: [ONLY the A/B/C/D...; not a complete sentence]\n\n"
             "Only give me the reply according to this format, don't give me any other words. "
             "Please make sure to analyze step by step before giving the answer."
+            "Question: "  # This is to ensure the question is clearly stated in the prompt
             ,
     "scieval" :
             "Read the question, analyze step by step and provide your answer. "
@@ -35,6 +36,7 @@ dataset_prompt_dict = {
             "Answer: [ONLY the final answer; not a complete sentence]\n\n"
             "Only give me the reply according to this format, don't give me any other words. "
             "Please make sure to analyze step by step before giving the answer."
+            "Question: "  # This is to ensure the question is clearly stated in the prompt
             ,
     "numina_math" :
             "Read the question, analyze step by step and provide your answer. "
@@ -43,6 +45,7 @@ dataset_prompt_dict = {
             "Answer: [ONLY the numerical number be enclosed within \\boxed{}; not a complete sentence]\n\n"
             "Only give me the reply according to this format, don't give me any other words. "
             "Please make sure to analyze step by step before giving the answer."
+            "Question: "  # This is to ensure the question is clearly stated in the prompt
             ,
     "logicnli" :
             "Please determine whether the hypothesis is entailment/neutral/self_contradiction/self-contradiction/contradiction "
@@ -52,6 +55,7 @@ dataset_prompt_dict = {
             "Answer: [ONLY the entailment/neutral/self_contradiction/self-contradiction/contradiction; not a complete sentence]\n\n"
             "Only give me the reply according to this format, don't give me any other words. "
             "Please make sure to analyze step by step and give me your evidence before giving the answer."
+            "Question: "  # This is to ensure the question is clearly stated in the prompt
             ,
 }
 
@@ -93,8 +97,8 @@ if __name__ == "__main__":
     local_train_file = args.local_train_file
     local_test_file = args.local_test_file
     hdfs_dir = args.hdfs_dir
-    train_parquet_file = "train_promptv7.parquet"
-    test_parquet_file = "test_promptv7.parquet"
+    train_parquet_file = "train_promptv8.parquet"
+    test_parquet_file = "test_promptv8.parquet"
 
     data_source = "C2RM"
     # print(f"Loading the {data_source} dataset from huggingface...", flush=True)
@@ -110,7 +114,7 @@ if __name__ == "__main__":
     train_dataset = dataset["train"]
     test_dataset = dataset["test"]
 
-    confidence_prompt = "Based on your answer, please attach a confidence signal ranging from 1-10 to specify whether you are certain about your answer. 1 means you are totally uncertain (strong inconfidence), while 10 means you are totally certain (strong confidence). If you need more information to answer the question, please attach 1. We will compare your answer with the ground truth to check the correctness. If your answer is correct and accompanied by strong confidence, you will be rewarded; if your answer is incorrect but assigned strong confidence, you will be punished. The signal should be in the format of <CONFIDENCE:NUMBER>, where NUMBER ranges from 1 to 10, directly appended to your answer.\n"
+    confidence_prompt = "Put your answer into <ANSWER is: \\boxed{Your answer}>. \nBased on your answer, please attach a confidence signal ranging from 1-10 to specify whether you are certain about your answer. 1 means you are totally uncertain (strong inconfidence), while 10 means you are totally certain (strong confidence). If you need more information to answer the question, please attach 1. We will compare your answer with the ground truth to check the correctness. If your answer is correct and accompanied by strong confidence, you will be rewarded; if your answer is incorrect but assigned strong confidence, you will be punished. The signal should be in the format of <CONFIDENCE:NUMBER>, where NUMBER ranges from 1 to 10, directly appended to your answer.The last line of your output should be in the format: <ANSWER is: \\boxed{Your answer}>|<CONFIDENCE:NUMBER>."
                             
 
     # add a row to each data item that represents a unique id
@@ -125,7 +129,7 @@ if __name__ == "__main__":
             if dataset_prompt is None:
                 raise ValueError(f"Dataset {dataset_str} is not supported or not found in dataset_prompt_dict.")
 
-            question =  dataset_prompt + "\n\n"+ question + "\n\n" + confidence_prompt + "\n " 
+            question =  dataset_prompt + "\n\n" + question + "\n\n" + confidence_prompt + "\n " 
 
             ground_truth = solution
             data = {

@@ -273,6 +273,8 @@ class vLLMRollout(BaseRollout):
         print("This is vllm_rollout_spmd.py generate_sequences, sampling_params:", self.sampling_params)
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
+            print("This is vllm_rollout_spmd.py generate_sequences, sampling_params after updating:", self.sampling_params)
+            print("This is vllm_rollout_spmd.py generate_sequences, vllm_inputs.keys[-1],PIL Image", vllm_inputs[-1])
             outputs = self.inference_engine.generate(
                 prompts=vllm_inputs,  # because we have already convert it to prompt token id
                 sampling_params=self.sampling_params,

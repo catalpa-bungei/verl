@@ -170,8 +170,13 @@ class RLHFDataset(Dataset):
             multi_modal_data = {}
 
             images = None
+            # print("This is rl_dataset.py, row_dict:", row_dict)
             if self.image_key in row_dict:
-                images = [process_image(image) for image in row_dict.pop(self.image_key)]
+                # print("This is rl_dataset.py, self.image_key:", self.image_key)
+                if row_dict[self.image_key] is None:
+                    images = None
+                else:
+                    images = [process_image(image) for image in row_dict.pop(self.image_key)]
                 multi_modal_data["image"] = images
 
             videos = None

@@ -736,15 +736,22 @@ class RayPPOTrainer:
             print("Warning: 'known_correct_tag' not found in reward_extra_infos_dict, skipping known tag ratio calculation.")
 
         if "confidence_level" in reward_extra_infos_dict:
+            # from sklearn.metrics import roc_auc_score, roc_curve
             # calculate the ratio of confidence level
             confidence_levels = reward_extra_infos_dict["confidence_level"]
+            # correctness_list = reward_extra_infos_dict.get("correctness", [])
+            # "correct" -> 1, "incorrect" -> 0
+            # int_correctness_list = [1 if x == "correct" else 0 for x in correctness_list]
+            # auroc = roc_auc_score(int_correctness_list, confidence_levels) if int_correctness_list else -1
+
             total = len(confidence_levels)
-            # confidence_levels includes int and str "unmatched"; count the number of int
-            int_confidence_levels = [x for x in confidence_levels if isinstance(x, int)]
-            unmatched_count = confidence_levels.count("unmatched")
+            # confidence_levels includes int and -1; count the number of int
+            int_confidence_levels = [x for x in confidence_levels if x != -1]
+            unmatched_count = confidence_levels.count(-1)
             average_confidence = sum(int_confidence_levels) / len(int_confidence_levels) if int_confidence_levels else -1
             metric_dict["val-core/average_confidence_level"] = average_confidence
             metric_dict["val-aux/unmatched_confidence_ratio"] = unmatched_count / total if total > 0 else -1
+            # metric_dict["val-core/auroc"] = auroc
 
         if "correctness" in reward_extra_infos_dict:
             # calculate the ratio of correctness
@@ -757,6 +764,11 @@ class RayPPOTrainer:
         
         if "unique_confidence_ratio" in reward_extra_infos_dict:
             metric_dict["val-core/latest_unique_confidence_ratio"] = reward_extra_infos_dict["unique_confidence_ratio"][-1] if reward_extra_infos_dict["unique_confidence_ratio"] else -1
+
+        if "ece" in reward_extra_infos_dict:
+            ece_lists = reward_extra_infos_dict["ece"]
+            avg_ece = sum(ece_lists) / len(ece_lists) if ece_lists else -1
+            metric_dict["val-core/average_ece"] = avg_ece
 
         return metric_dict
 
@@ -960,6 +972,9 @@ class RayPPOTrainer:
         # perform validation before training
         # currently, we only support validation using the reward_function.
         if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
+            # Xuqing's modification
+            self.val_reward_fn.assign_step(self.global_steps, self.total_training_steps)
+            
             val_metrics = self._validate()
             assert val_metrics, f"{val_metrics=}"
             pprint(f"Initial validation metrics: {val_metrics}")
@@ -973,6 +988,12 @@ class RayPPOTrainer:
         # we start from step 1
         self.global_steps += 1
         last_val_metrics = None
+
+        # Xuqing's modification
+        if self.reward_fn is not None:
+            self.reward_fn.assign_step(self.global_steps, self.total_training_steps)
+        if self.val_reward_fn is not None:
+            self.val_reward_fn.assign_step(self.global_steps, self.total_training_steps)
 
         for epoch in range(self.config.trainer.total_epochs):
             for batch_dict in self.train_dataloader:
@@ -1208,9 +1229,9 @@ class RayPPOTrainer:
                     # calculate the ratio of confidence level
                     confidence_levels = reward_extra_infos_dict["confidence_level"]
                     total = len(confidence_levels)
-                    # confidence_levels includes int and str "unmatched"; count the number of int
-                    int_confidence_levels = [x for x in confidence_levels if isinstance(x, int)]
-                    unmatched_count = confidence_levels.count("unmatched")
+                    # confidence_levels includes int and -1; count the number of int
+                    int_confidence_levels = [x for x in confidence_levels if x != -1]
+                    unmatched_count = confidence_levels.count(-1)
                     average_confidence = sum(int_confidence_levels) / len(int_confidence_levels) if int_confidence_levels else -1
                     metrics["training-core/average_confidence_level"] = average_confidence
                     metrics["training-core/unmatched_confidence_ratio"] = unmatched_count / total if total > 0 else -1
@@ -1225,8 +1246,17 @@ class RayPPOTrainer:
 
                 if "unique_confidence_ratio" in reward_extra_infos_dict:
                     metrics["training-core/latest_unique_confidence_ratio"] = reward_extra_infos_dict["unique_confidence_ratio"][-1] if reward_extra_infos_dict["unique_confidence_ratio"] else -1
-                    
-                
+
+                if "ece" in reward_extra_infos_dict:
+                    ece_lists = reward_extra_infos_dict["ece"]
+                    avg_ece = sum(ece_lists) / len(ece_lists) if ece_lists else -1
+                    metrics["training-core/ece"] = avg_ece
+
+                if "score" in reward_extra_infos_dict:
+                    score = reward_extra_infos_dict["score"]
+                    avg_score = sum(score) / len(score) if score else -1
+                    metrics["training-core/reward"] = avg_score
+
                 metrics.update(
                     {
                         "training/global_step": self.global_steps,
@@ -1250,3 +1280,8 @@ class RayPPOTrainer:
 
                 progress_bar.update(1)
                 self.global_steps += 1
+                # Xuqing's modification
+                if self.reward_fn is not None:
+                    self.reward_fn.assign_step(self.global_steps, self.total_training_steps)
+                if self.val_reward_fn is not None:
+                    self.val_reward_fn.assign_step(self.global_steps, self.total_training_steps)
