@@ -23,11 +23,18 @@ from verl.utils.reward_score import _default_compute_score
 class NaiveRewardManager:
     """The reward manager."""
 
-    def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key="data_source") -> None:
+    def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key="data_source", current_step=None, total_step=None) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or _default_compute_score
         self.reward_fn_key = reward_fn_key
+        self.current_step = current_step
+        self.total_step = total_step
+
+    def assign_step(self, current_step, total_step):
+        """Assign current step and total step to the reward manager."""
+        self.current_step = current_step
+        self.total_step = total_step
 
     def __call__(self, data: DataProto, return_dict=False):
         """We will expand this function gradually based on the available datasets"""
@@ -67,6 +74,8 @@ class NaiveRewardManager:
             data_source = data_item.non_tensor_batch[self.reward_fn_key]
 
             extra_info = data_item.non_tensor_batch.get("extra_info", None)
+            extra_info['current_step'] = self.current_step
+            extra_info['total_step'] = self.total_step
 
             score = self.compute_score(
                 data_source=data_source,

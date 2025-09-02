@@ -97,7 +97,9 @@ class TaskRunner:
         # instantiate tokenizer
         from verl.utils import hf_processor, hf_tokenizer
 
-        trust_remote_code = config.data.get("trust_remote_code", False)
+        # trust_remote_code = config.data.get("trust_remote_code", False)
+        trust_remote_code = config.data.get("trust_remote_code", True)
+        print("trust_remote_code:---------------------", trust_remote_code)
         tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code)
         processor = hf_processor(local_path, use_fast=True)  # used for multimodal LLM, could be none
 

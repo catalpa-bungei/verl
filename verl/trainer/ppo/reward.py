@@ -99,6 +99,7 @@ def load_reward_manager(config, tokenizer, num_examine, **reward_kwargs):
         **reward_kwargs,
     )
 
+# Xuqing's note: currently, naive manager has not been assigned with steps. We can assign steps later using assign_step method.
 
 def compute_reward(data: DataProto, reward_fn):
     """

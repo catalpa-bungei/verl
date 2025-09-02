@@ -5,12 +5,19 @@ ENGINE=${1:-vllm}
 export PYTHONPATH=/fs-computility/wangxuhong/yangxuqing/
 export http_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
 export https_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
-c2rm_train_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/train_promptv7.parquet
-c2rm_test_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/test_promptv7.parquet
-# c2rm_train_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/train-mini.parquet
-# c2rm_test_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/test-mini.parquet
-train_files="['$c2rm_train_path']"
-test_files="['$c2rm_test_path']"
+# c2rm_train_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/train_promptv7.parquet
+# c2rm_test_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/test_promptv7.parquet
+
+train_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/text/text_train_promptv8.parquet
+test_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/text/text_test_promptv8.parquet
+balance_train_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/text/balance/text_balance_train_promptv8.parquet
+balance_test_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/text/balance/text_balance_test_promptv8.parquet
+proportion_train_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/text/proportion/text_proportion_train_promptv8.parquet
+proportion_test_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/text/proportion/text_proportion_test_promptv8.parquet
+
+
+train_files="['$train_path']"
+test_files="['$test_path']"
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
@@ -40,23 +47,23 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
     actor_rollout_ref.rollout.name=$ENGINE \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
     actor_rollout_ref.rollout.enable_chunked_prefill=False \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.free_cache_engine=False \
     actor_rollout_ref.rollout.n=5 \
     actor_rollout_ref.rollout.max_num_seqs=500 \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
-    custom_reward_function.path=/fs-computility/wangxuhong/yangxuqing/verl/verl/utils/reward_score/c2rm_reward.py \
+    custom_reward_function.path=/fs-computility/wangxuhong/yangxuqing/verl/verl/utils/reward_score/Brier_reward.py \
     custom_reward_function.name=compute_score_reference_data \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='verl_grpo_c2rm-test0.01_qwen2.5vl-7b_promptv7_T5_temp0.7' \
-    trainer.experiment_name='c2rm-beta0.1_ece_we0.1_alpha0.5' \
+    trainer.project_name='verl_grpo_text-test0.01_qwen2.5vl-7b_promptv8_T5_temp0.7' \
+    trainer.experiment_name='text-brier1_alpha0.5' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
-    trainer.save_freq=20 \
+    trainer.save_freq=30 \
     trainer.test_freq=10 \
     trainer.val_before_train=True \
     trainer.total_epochs=1 $@
