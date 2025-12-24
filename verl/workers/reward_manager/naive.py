@@ -77,6 +77,9 @@ class NaiveRewardManager:
             extra_info['current_step'] = self.current_step
             extra_info['total_step'] = self.total_step
 
+            group_avg_acc = data_item.non_tensor_batch.get("group_avg_acc", None)
+            extra_info['group_avg_acc'] = group_avg_acc
+
             score = self.compute_score(
                 data_source=data_source,
                 solution_str=response_str,

@@ -1048,6 +1048,101 @@ class RayPPOTrainer:
                     batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                     batch = batch.union(gen_batch_output)
 
+                    #================================ Xuqing's modification: assign correctness to each sample in the batch =============================
+                    from post_processing.processing.answer_extraction import AnswerExtractor
+                    from post_processing.processing.answer_comparison import AnswerComparator   
+                    def convert_to_dataset_type(dataset_name: str) -> str:
+                        """
+                        Convert dataset name to a standardized dataset type.
+                        
+                        Args:
+                            dataset_name (str): The name of the dataset.
+                            
+                        Returns:
+                            str: The standardized dataset type.
+                        """
+                        print("dataset_name:", dataset_name)
+                        if "logicnli" in dataset_name.lower():
+                            return "logicnli"
+                        elif "scieval" in dataset_name.lower():
+                            return "scieval"
+                        elif "numinamath" in dataset_name.lower() or "numina_math" in dataset_name.lower():
+                            return "numina_math"
+                        elif "logiqa" in dataset_name.lower():
+                            return "logiqa"
+                        elif "sciknoweval" in dataset_name.lower():
+                            return "sciknoweval"
+                        elif "webinstruct" in dataset_name.lower():
+                            return "webinstruct"
+                        elif "mmk12" in dataset_name.lower():
+                            return "mmk12"
+                        elif "m3cot" in dataset_name.lower():
+                            return "m3cot"
+                        elif "mavis" in dataset_name.lower():
+                            return "mavis"
+                        else:
+                            print("Can't convert dataset_name:", dataset_name)
+                            raise ValueError("Unsupported dataset name: {}".format(dataset_name))
+
+                    # 1. Get Responses (Tensor)
+                    response_ids = batch.batch["responses"]
+
+                    # 2. Get Ground Truth (from non_tensor_batch)
+                    # Note: This depends on your data structure. Based on c2rm.py, it might be in 'reward_model' or 'extra_info'
+                    ground_truths = batch.non_tensor_batch["reward_model"] # array of dicts: {'style': 'rule', 'ground_truth': ...}
+                    extra_infos = batch.non_tensor_batch.get("extra_info", [{}] * len(response_ids))
+
+                    # 3. Iterate and Compare
+                    for i in range(len(response_ids)):
+                        response_text = self.tokenizer.decode(response_ids[i], skip_special_tokens=True)
+                        ground_truth = ground_truths[i]["ground_truth"]
+                        data_id = extra_infos[i].get("data_id", "unmatched")
+                        dataset = extra_infos[i].get("dataset", "unknown")
+                        dataset_type = convert_to_dataset_type(dataset)
+                        answer_extractor = AnswerExtractor(dataset_type=dataset_type)
+                        answer_comparator = AnswerComparator(dataset_type=dataset_type)
+                        solution = answer_extractor.extract_answer(id=None, model_output=response_text)
+                        # ground_truth_extracted = answer_extractor.extract_answer(id=None, model_output=ground_truth)
+                        if dataset_type == "webinstruct":
+                            if 'integer' in data_id.lower():
+                                answer_type = "Integer"
+                            else: 
+                                raise ValueError("Unsupported answer type for webinstruct dataset.")
+                            compare_result = answer_comparator.compare_webinstruct_answer(solution, ground_truth, answer_type)
+                        else:
+                            compare_result = answer_comparator.compare_answer(solution, ground_truth)
+
+                        local_correctness = 1 if compare_result == 'true' else 0
+                        # Store correctness in non_tensor_batch
+                        if "local_correctnesses" not in batch.non_tensor_batch:
+                            batch.non_tensor_batch["local_correctnesses"] = np.array([0] * len(response_ids), dtype=int)
+                        batch.non_tensor_batch["local_correctnesses"][i] = local_correctness
+
+                    # 4. Calculate Group Average Accuracy (GRPO style)
+                    # Check whether it is GRPO setting
+                    if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO:
+                        # We need to group by 'uid' because GRPO samples multiple responses per prompt.
+                        uids = batch.non_tensor_batch["uid"]
+                        local_correctnesses = batch.non_tensor_batch["local_correctnesses"]
+                        
+                        # Create a mapping from uid to list of correctness scores
+                        uid_to_scores = defaultdict(list)
+                        for i, uid in enumerate(uids):
+                            uid_to_scores[uid].append(local_correctnesses[i])
+                        
+                        # Calculate average score for each uid
+                        uid_to_avg_score = {uid: np.mean(scores) for uid, scores in uid_to_scores.items()}
+                        
+                        # Assign the group average score back to each sample
+                        # This creates an array where every sample from the same prompt gets the same group average score
+                        group_avg_acc = np.array([uid_to_avg_score[uid] for uid in uids])
+                        
+                        # Store it in non_tensor_batch so the reward function can access it
+                        batch.non_tensor_batch["group_avg_acc"] = group_avg_acc
+
+                    # ================================= End of Xuqing's modification ========================================================
+
+
                     batch.batch["response_mask"] = compute_response_mask(batch)
                     # balance the number of valid tokens on each dp rank.
                     # Note that this breaks the order of data inside the batch.
