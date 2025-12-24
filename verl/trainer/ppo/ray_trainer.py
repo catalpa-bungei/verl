@@ -61,6 +61,10 @@ from verl.utils.torch_functional import masked_mean
 from verl.utils.tracking import ValidationGenerationsLogger
 from verl.workers.rollout.async_server import AsyncLLMServerManager
 
+from post_processing.processing.answer_extraction import AnswerExtractor
+from post_processing.processing.answer_comparison import AnswerComparator 
+from verl.utils.reward_score.customized_reward_yxq import convert_to_dataset_type
+
 WorkerType = Type[Worker]
 
 
@@ -1049,40 +1053,8 @@ class RayPPOTrainer:
                     batch = batch.union(gen_batch_output)
 
                     #================================ Xuqing's modification: assign correctness to each sample in the batch =============================
-                    from post_processing.processing.answer_extraction import AnswerExtractor
-                    from post_processing.processing.answer_comparison import AnswerComparator   
-                    def convert_to_dataset_type(dataset_name: str) -> str:
-                        """
-                        Convert dataset name to a standardized dataset type.
-                        
-                        Args:
-                            dataset_name (str): The name of the dataset.
-                            
-                        Returns:
-                            str: The standardized dataset type.
-                        """
-                        print("dataset_name:", dataset_name)
-                        if "logicnli" in dataset_name.lower():
-                            return "logicnli"
-                        elif "scieval" in dataset_name.lower():
-                            return "scieval"
-                        elif "numinamath" in dataset_name.lower() or "numina_math" in dataset_name.lower():
-                            return "numina_math"
-                        elif "logiqa" in dataset_name.lower():
-                            return "logiqa"
-                        elif "sciknoweval" in dataset_name.lower():
-                            return "sciknoweval"
-                        elif "webinstruct" in dataset_name.lower():
-                            return "webinstruct"
-                        elif "mmk12" in dataset_name.lower():
-                            return "mmk12"
-                        elif "m3cot" in dataset_name.lower():
-                            return "m3cot"
-                        elif "mavis" in dataset_name.lower():
-                            return "mavis"
-                        else:
-                            print("Can't convert dataset_name:", dataset_name)
-                            raise ValueError("Unsupported dataset name: {}".format(dataset_name))
+                    # from post_processing.processing.answer_extraction import AnswerExtractor
+                    # from post_processing.processing.answer_comparison import AnswerComparator 
 
                     # 1. Get Responses (Tensor)
                     response_ids = batch.batch["responses"]
@@ -1096,6 +1068,7 @@ class RayPPOTrainer:
                     for i in range(len(response_ids)):
                         response_text = self.tokenizer.decode(response_ids[i], skip_special_tokens=True)
                         ground_truth = ground_truths[i]["ground_truth"]
+                        # print("Fetching extra_infos...\n")
                         data_id = extra_infos[i].get("data_id", "unmatched")
                         dataset = extra_infos[i].get("dataset", "unknown")
                         dataset_type = convert_to_dataset_type(dataset)
@@ -1114,6 +1087,7 @@ class RayPPOTrainer:
 
                         local_correctness = 1 if compare_result == 'true' else 0
                         # Store correctness in non_tensor_batch
+                        print("Assigning local_correctnesses...\n")
                         if "local_correctnesses" not in batch.non_tensor_batch:
                             batch.non_tensor_batch["local_correctnesses"] = np.array([0] * len(response_ids), dtype=int)
                         batch.non_tensor_batch["local_correctnesses"][i] = local_correctness
@@ -1121,6 +1095,7 @@ class RayPPOTrainer:
                     # 4. Calculate Group Average Accuracy (GRPO style)
                     # Check whether it is GRPO setting
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO:
+                        # print("This is GRPO! =======================\n")
                         # We need to group by 'uid' because GRPO samples multiple responses per prompt.
                         uids = batch.non_tensor_batch["uid"]
                         local_correctnesses = batch.non_tensor_batch["local_correctnesses"]
@@ -1139,9 +1114,9 @@ class RayPPOTrainer:
                         
                         # Store it in non_tensor_batch so the reward function can access it
                         batch.non_tensor_batch["group_avg_acc"] = group_avg_acc
+                        # batch.non_tensor_batch keys: dict_keys(['dataset_type', 'index', 'generated_idx', 'data_id', 'extracted_answer', 'correctness', 'confidence', 'model_output', 'answer_type', 'valid', 'avg_valid', 'data_source', 'reward_model', 'extra_info', 'uid', 'multi_modal_inputs', 'tools_kwargs', 'local_correctnesses', 'group_avg_acc']) 
 
                     # ================================= End of Xuqing's modification ========================================================
-
 
                     batch.batch["response_mask"] = compute_response_mask(batch)
                     # balance the number of valid tokens on each dp rank.
