@@ -3,13 +3,15 @@
 set -x
 ENGINE=${1:-vllm}
 export PYTHONPATH=/mnt/shared-storage-user/yangxuqing
-export http_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
-export https_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
+export http_proxy=http://yangxuqing:6cbzFONHNvLv0uKjS70E8ST33Gy83xum2NvHpjMlBnfHPqXHKXWBZWZp6qcW@10.1.20.50:23128
+export https_proxy=http://yangxuqing:6cbzFONHNvLv0uKjS70E8ST33Gy83xum2NvHpjMlBnfHPqXHKXWBZWZp6qcW@10.1.20.50:23128
+export WANDB_API_KEY=f49497a793fd30f43cd1d8279cde35b43c3dd7c8
 # c2rm_train_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/train_promptv7.parquet
 # c2rm_test_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/test_promptv7.parquet
 
 train_path=/mnt/shared-storage-user/yangxuqing/post_processing/create_training_data/data/text/text_train_promptv8.parquet
 test_path=/mnt/shared-storage-user/yangxuqing/post_processing/create_training_data/data/text/text_test_promptv8.parquet
+round2_train_path=/mnt/shared-storage-user/yangxuqing/post_processing/create_training_data/data/text/round2/text_round2_train_promptv8.parquet
 balance_train_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/text/balance/text_balance_train_promptv8.parquet
 balance_test_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/text/balance/text_balance_test_promptv8.parquet
 proportion_train_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/text/proportion/text_proportion_train_promptv8.parquet
@@ -31,7 +33,7 @@ python3 -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     data.image_key=images \
-    actor_rollout_ref.model.path=/mnt/shared-storage-user/yangxuqing/verl/merged_model/qwen2_5_vl_7b_promptv8_T5_temp0.7-text-beta0.1_alpha0.5/global_step_103 \
+    actor_rollout_ref.model.path=/mnt/shared-storage-user/yangxuqing/models/Qwen2.5VL-7B-Instruct/5b5eecc7efc2c3e86839993f2689bbbdf06bd8d4 \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=256 \
@@ -51,7 +53,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.enable_chunked_prefill=False \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.free_cache_engine=False \
-    actor_rollout_ref.rollout.n=5 \
+    actor_rollout_ref.rollout.n=10 \
     actor_rollout_ref.rollout.max_num_seqs=500 \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
     custom_reward_function.path=/mnt/shared-storage-user/yangxuqing/verl/verl/utils/reward_score/customized_reward_yxq.py \
@@ -59,11 +61,11 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='verl_grpo_textR2-test0.01_qwen2.5vl-7b_promptv8_T5_temp0.7' \
-    trainer.experiment_name='text-beta0.1_alpha0.5' \
-    trainer.n_gpus_per_node=8 \
+    trainer.project_name='verl_grpo_text-test0.01_qwen2.5vl-7b_promptv8_T5_temp0.7' \
+    trainer.experiment_name='text-beta0.2' \
+    trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
-    trainer.save_freq=30 \
+    trainer.save_freq=55 \
     trainer.test_freq=10 \
     trainer.val_before_train=True \
     trainer.total_epochs=1 $@
