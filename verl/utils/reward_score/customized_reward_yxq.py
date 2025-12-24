@@ -6,7 +6,11 @@ from typing import Dict, List, Tuple, Any, Optional, Set
 from collections import Counter
 from enum import Enum
 import sys
+<<<<<<< HEAD
 sys.path.append('/fs-computility/wangxuhong/yangxuqing')
+=======
+sys.path.append('/mnt/shared-storage-user/yangxuqing')
+>>>>>>> a3ea79f409eddf1a8409819ec368de5c3de333ff
 from post_processing.processing.answer_extraction import AnswerExtractor
 from post_processing.processing.answer_comparison import AnswerComparator
 # from .....post_processing.processing.answer_extraction import AnswerExtractor
@@ -98,6 +102,11 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     current_step = extra_info.get("current_step", -1)  # Default to -1 if not provided
     total_step = extra_info.get("total_step", -1)  # Default to -1 if not provided
     group_avg_acc = extra_info.get("group_avg_acc", -1)  # Default to -1 if not provided
+<<<<<<< HEAD
+=======
+    if not group_avg_acc:
+        group_avg_acc = -1
+>>>>>>> a3ea79f409eddf1a8409819ec368de5c3de333ff
     reference_accuracy = extra_info.get("reference_accuracy", -1)  # Default to -1 if not provided
     if reference_accuracy == -1:
         reference_tag = "unmatched"
@@ -163,10 +172,17 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         known_signal = "unmatched"
 
     # print("solution_str:", solution_str,"\n")
+<<<<<<< HEAD
     print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_accuracy:", reference_accuracy, "| current_step:", current_step, "| total_step:", total_step)
     
     beta = 0.1
     alpha = 0.5
+=======
+    print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_acc:", reference_accuracy, "| group acc:", group_avg_acc, "| current_step:", current_step, "| total_step:", total_step)
+    
+    beta = 0.2
+    alpha = 0
+>>>>>>> a3ea79f409eddf1a8409819ec368de5c3de333ff
     w_ece = 0
     w_diversity = 0
     known_correct_tag = ""
@@ -338,6 +354,10 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         "correctness": correctness,
         "unique_confidence_ratio": diversity,
         "reference_accuracy": reference_accuracy, 
+<<<<<<< HEAD
+=======
+        "group_accuracy": group_avg_acc,
+>>>>>>> a3ea79f409eddf1a8409819ec368de5c3de333ff
         "ece": 1 - current_ece_score
     }
     return reward

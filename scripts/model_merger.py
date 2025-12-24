@@ -67,6 +67,9 @@ except ImportError:
 
 from tqdm import tqdm
 
+import sys
+sys.path.append('/mnt/shared-storage-user/yangxuqing/verl')
+
 from verl.utils import hf_processor, hf_tokenizer
 
 
