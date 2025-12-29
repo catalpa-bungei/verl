@@ -1103,18 +1103,33 @@ class RayPPOTrainer:
                         # Create a mapping from uid to list of correctness scores
                         uid_to_scores = defaultdict(list)
                         for i, uid in enumerate(uids):
-                            uid_to_scores[uid].append(local_correctnesses[i])
+                            uid_to_scores[uid].append(local_correctnesses[i])  # {uid_A: [0, 1, 1, ...]}
                         
                         # Calculate average score for each uid
-                        uid_to_avg_score = {uid: np.mean(scores) for uid, scores in uid_to_scores.items()}
+                        uid_to_avg_score = {uid: np.mean(scores) for uid, scores in uid_to_scores.items()} # {uid_A: 0.67, uid_B: 0.33, ...}
                         
                         # Assign the group average score back to each sample
                         # This creates an array where every sample from the same prompt gets the same group average score
-                        group_avg_acc = np.array([uid_to_avg_score[uid] for uid in uids])
+                        group_avg_acc = np.array([uid_to_avg_score[uid] for uid in uids]) # if n=5, then group_avg_acc = [0.67,0.67,0.67,0.67,0.67,0.33,0.33,0.33,0.33,0.33,...]
                         
                         # Store it in non_tensor_batch so the reward function can access it
                         batch.non_tensor_batch["group_avg_acc"] = group_avg_acc
                         # batch.non_tensor_batch keys: dict_keys(['dataset_type', 'index', 'generated_idx', 'data_id', 'extracted_answer', 'correctness', 'confidence', 'model_output', 'answer_type', 'valid', 'avg_valid', 'data_source', 'reward_model', 'extra_info', 'uid', 'multi_modal_inputs', 'tools_kwargs', 'local_correctnesses', 'group_avg_acc']) 
+
+                        # ================================= Filter based on group_avg_acc =================================
+                        # Filter out groups that are all correct (1.0) or all incorrect (0.0)
+                        # This mimics DAPO's std > 0 filtering for binary outcomes
+                        if self.config.algorithm.get("filter_groups", {}).get("enable", False):
+                            # Keep indices where 0 < group_avg_acc < 1
+                            # Note: group_avg_acc is already broadcasted to each sample
+                            keep_indices = np.where((group_avg_acc > 0.0) & (group_avg_acc < 1.0))[0]
+                            
+                            if len(keep_indices) > 0:
+                                batch = batch[keep_indices]
+                                print(f"Filtered batch size: {len(batch)} (kept {len(keep_indices)}/{len(group_avg_acc)})")
+                            else:
+                                print("Warning: All samples filtered out! Keeping original batch to avoid crash.")
+                        # ================================= End of Filter =================================
 
                     # ================================= End of Xuqing's modification ========================================================
 

@@ -184,12 +184,13 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
 
     # Use ECE as the base score
     current_accuracy_0 = 1 if correctness == "correct" else 0
-    current_accuracy = group_avg_acc if group_avg_acc else current_accuracy_0
+    current_accuracy = group_avg_acc if group_avg_acc>=0 else current_accuracy_0
     if confidence_level == -1:
         current_ece_score = 0
         reference_ece_score = 0
     else:
         current_ece_score = 0.5 - abs(current_accuracy - confidence_level / range)  # ECE score based on confidence level
+        current_ece_score_0 = 1 - abs(current_accuracy_0 - confidence_level / range)  # ECE score based on current accuracy 0/1
         reference_ece_score = 1 - abs(reference_accuracy - confidence_level / range)  # Reference ECE score based on reference accuracy
     if whether_reference:
         ece_score = (current_ece_score * current_step / total_step) + (reference_ece_score * (total_step - current_step) / total_step)  # dynamic ECE score
@@ -240,7 +241,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         "unique_confidence_ratio": diversity,
         "reference_accuracy": reference_accuracy, 
         "group_accuracy": group_avg_acc,
-        "ece": 1 - current_ece_score
+        "ece": 1 - current_ece_score_0
     }
     return reward
 
