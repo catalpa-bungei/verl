@@ -62,7 +62,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_grpo_text-test0.01_qwen2.5vl-7b_promptv8_T5_temp0.7-group' \
-    trainer.experiment_name='text-beta0.2' \
+    trainer.experiment_name='text-beta0.5_20251226' \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=55 \

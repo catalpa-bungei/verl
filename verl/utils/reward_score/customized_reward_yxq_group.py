@@ -167,9 +167,9 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     # print("solution_str:", solution_str,"\n")
     print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| group_accuracy:", group_avg_acc, "| current_step:", current_step, "| total_step:", total_step)
     
-    beta = 0.2
+    beta = 0.5
     alpha = 0
-    w_ece = 0.2
+    w_ece = 0.5
     w_diversity = 0
     known_correct_tag = ""
     whether_ece = True
@@ -184,6 +184,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
 
     # Use ECE as the base score
     current_accuracy_0 = 1 if correctness == "correct" else 0
+    current_ece_score0 = 1 - abs(current_accuracy_0 - confidence_level / range)
     current_accuracy = group_avg_acc if group_avg_acc>=0 else current_accuracy_0
     if confidence_level == -1:
         current_ece_score = 0
@@ -241,7 +242,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         "unique_confidence_ratio": diversity,
         "reference_accuracy": reference_accuracy, 
         "group_accuracy": group_avg_acc,
-        "ece": 1 - current_ece_score_0
+        "ece": 1 - current_ece_score0
     }
     return reward
 
