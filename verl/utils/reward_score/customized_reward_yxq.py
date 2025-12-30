@@ -98,6 +98,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     current_step = extra_info.get("current_step", -1)  # Default to -1 if not provided
     total_step = extra_info.get("total_step", -1)  # Default to -1 if not provided
     group_avg_acc = extra_info.get("group_avg_acc", -1)  # Default to -1 if not provided
+    group_correlation = extra_info.get("group_correlation", 0)  # Default to 0 if not provided
     if not group_avg_acc:
         group_avg_acc = -1
     reference_accuracy = extra_info.get("reference_accuracy", -1)  # Default to -1 if not provided
@@ -341,7 +342,8 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         "unique_confidence_ratio": diversity,
         "reference_accuracy": reference_accuracy, 
         "group_accuracy": group_avg_acc,
-        "ece": 1 - current_ece_score
+        "ece": 1 - current_ece_score,
+        "group_correlation": group_correlation
     }
     return reward
 
