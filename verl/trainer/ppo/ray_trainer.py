@@ -64,6 +64,7 @@ from verl.workers.rollout.async_server import AsyncLLMServerManager
 from post_processing.processing.answer_extraction import AnswerExtractor
 from post_processing.processing.answer_comparison import AnswerComparator 
 from verl.utils.reward_score.customized_reward_yxq import convert_to_dataset_type, extract_confidence_level
+from verl.trainer.ppo.confidence_adaptive_sampling import confidence_adaptive_sampling
 
 WorkerType = Type[Worker]
 
@@ -999,6 +1000,10 @@ class RayPPOTrainer:
         if self.val_reward_fn is not None:
             self.val_reward_fn.assign_step(self.global_steps, self.total_training_steps)
 
+        # Xuqing's modification: Initialize accumulation counters for kept prompts and inference count
+        self.total_kept_prompts = 0
+        self.total_inference_count = 0
+
         for epoch in range(self.config.trainer.total_epochs):
             accumulated_batch = None
             num_gen_batches = 0
@@ -1092,18 +1097,23 @@ class RayPPOTrainer:
 
                         local_correctness = 1 if compare_result == 'true' else 0
                         # Store correctness in non_tensor_batch
-                        print("Assigning local_correctnesses...\n")
+                        # print("Assigning local_correctnesses...\n")
                         if "local_correctnesses" not in batch.non_tensor_batch:
                             batch.non_tensor_batch["local_correctnesses"] = np.array([0] * len(response_ids), dtype=int)
                         if "local_confidences" not in batch.non_tensor_batch:
                             batch.non_tensor_batch["local_confidences"] = np.array([-1.0] * len(response_ids), dtype=float)
+                        if "model_output" not in batch.non_tensor_batch:
+                            batch.non_tensor_batch["model_output"] = np.array([""] * len(response_ids), dtype=object)
+                        
                         batch.non_tensor_batch["local_correctnesses"][i] = local_correctness
                         batch.non_tensor_batch["local_confidences"][i] = local_confidence
+                        batch.non_tensor_batch["model_output"][i] = response_text
 
-                    # 4. Calculate Group Average Accuracy (GRPO style)
+                    # 4. Calculate Group Average Accuracy and Correlation (GRPO style)
                     # Check whether it is GRPO setting
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO:
                         # print("This is GRPO! =======================\n")
+                        
                         # We need to group by 'uid' because GRPO samples multiple responses per prompt.
                         uids = batch.non_tensor_batch["uid"]
                         local_correctnesses = batch.non_tensor_batch["local_correctnesses"]
@@ -1138,19 +1148,57 @@ class RayPPOTrainer:
                         batch.non_tensor_batch["group_correlation"] = group_conf_corr
                         # batch.non_tensor_batch keys: dict_keys(['dataset_type', 'index', 'generated_idx', 'data_id', 'extracted_answer', 'correctness', 'confidence', 'model_output', 'answer_type', 'valid', 'avg_valid', 'data_source', 'reward_model', 'extra_info', 'uid', 'multi_modal_inputs', 'tools_kwargs', 'local_correctnesses', 'group_avg_acc']) 
 
-                        # ================================= Filter based on group_avg_acc =================================
+                        # ================================= Customized Filtering =================================
                         # Filter out groups that are all correct (1.0) or all incorrect (0.0)
                         # This mimics DAPO's std > 0 filtering for binary outcomes
                         filter_groups = True
                         if filter_groups:
                             num_gen_batches += 1
+                            
+                            # 1. Filter by group_avg_acc (DAPO style)
                             # Keep indices where 0 < group_avg_acc < 1
-                            # Note: group_avg_acc is already broadcasted to each sample
-                            keep_indices = np.where((group_avg_acc > 0.0) & (group_avg_acc < 1.0))[0]
+                            keep_indices_acc = np.where((group_avg_acc > 0.0) & (group_avg_acc < 1.0))[0]
+                            
+                            # 2. Filter by Adaptive Sampling
+                            # Only keep groups where cutoff_idx == n (i.e., all samples passed the confidence check)
+                            uids = batch.non_tensor_batch["uid"]
+                            model_outputs = batch.non_tensor_batch["model_output"]
+                            
+                            uid_to_indices = defaultdict(list)
+                            for i, uid in enumerate(uids):
+                                uid_to_indices[uid].append(i)
+                                
+                            keep_indices_adaptive = []
+                            for uid, indices in uid_to_indices.items():
+                                # Get responses for this group
+                                group_responses = [model_outputs[i] for i in indices]
+                                # Get cutoff index (0-based index of the last sample to keep)
+                                cutoff_idx = confidence_adaptive_sampling(group_responses)
+                                
+                                # Update total inference count (accumulate cutoff_idx + 1 for every prompt)
+                                self.total_inference_count += (cutoff_idx + 1)
+
+                                # Only keep the group if cutoff_idx is the last index (meaning all samples passed)
+                                if cutoff_idx == len(group_responses) - 1:
+                                    keep_indices_adaptive.extend(indices)
+                            
+                            keep_indices_adaptive = np.array(keep_indices_adaptive)
+                            
+                            # 3. Intersect the two filters
+                            if len(keep_indices_acc) > 0 and len(keep_indices_adaptive) > 0:
+                                keep_indices = np.intersect1d(keep_indices_acc, keep_indices_adaptive)
+                            else:
+                                keep_indices = np.array([])
                             
                             if len(keep_indices) > 0:
                                 filtered_batch = batch[keep_indices]
+                                # Update total kept prompts (count unique UIDs in the filtered batch)
+                                unique_kept_uids = len(np.unique(filtered_batch.non_tensor_batch["uid"])) # Should be equal to len(keep_indices) / n
+                                self.total_kept_prompts += unique_kept_uids
+                                
                                 print(f"Filtered batch size: {len(filtered_batch)} (kept {len(keep_indices)}/{len(group_avg_acc)})")
+                                print(f"  - Passed Acc Filter: {len(keep_indices_acc)}")
+                                print(f"  - Passed Adaptive Filter: {len(keep_indices_adaptive)}")
                             else:
                                 print("Warning: All samples filtered out!")
                                 filtered_batch = None
@@ -1404,6 +1452,10 @@ class RayPPOTrainer:
                     group_correlation_list = reward_extra_infos_dict["group_correlation"]
                     avg_group_correlation = sum(group_correlation_list) / len(group_correlation_list) if group_correlation_list else 0.0
                     metrics["training-core/average_group_correlation"] = avg_group_correlation
+
+                # Add global counters to metrics
+                metrics["training/total_kept_prompts"] = self.total_kept_prompts
+                metrics["training/total_inference_count"] = self.total_inference_count
 
                 metrics.update(
                     {
