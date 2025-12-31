@@ -80,6 +80,8 @@ class NaiveRewardManager:
 
             group_avg_acc = data_item.non_tensor_batch.get("group_avg_acc", None)
             extra_info['group_avg_acc'] = group_avg_acc
+            group_correlation = data_item.non_tensor_batch.get("group_correlation", None)
+            extra_info['group_correlation'] = group_correlation
             # End of Xuqing's modification
 
             score = self.compute_score(

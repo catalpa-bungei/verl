@@ -63,8 +63,7 @@ from verl.workers.rollout.async_server import AsyncLLMServerManager
 
 from post_processing.processing.answer_extraction import AnswerExtractor
 from post_processing.processing.answer_comparison import AnswerComparator 
-from verl.utils.reward_score.customized_reward_yxq import convert_to_dataset_type, extract_confidence_level
-from verl.trainer.ppo.confidence_adaptive_sampling import confidence_adaptive_sampling
+from verl.utils.reward_score.customized_reward_yxq import convert_to_dataset_type
 
 WorkerType = Type[Worker]
 
@@ -1000,13 +999,7 @@ class RayPPOTrainer:
         if self.val_reward_fn is not None:
             self.val_reward_fn.assign_step(self.global_steps, self.total_training_steps)
 
-        # Xuqing's modification: Initialize accumulation counters for kept prompts and inference count
-        self.total_kept_prompts = 0
-        self.total_inference_count = 0
-
         for epoch in range(self.config.trainer.total_epochs):
-            accumulated_batch = None
-            num_gen_batches = 0
             for batch_dict in self.train_dataloader:
                 metrics = {}
                 timing_raw = {}
@@ -1063,8 +1056,6 @@ class RayPPOTrainer:
                     # from post_processing.processing.answer_extraction import AnswerExtractor
                     # from post_processing.processing.answer_comparison import AnswerComparator 
 
-                    # Note that batch has been repeated according to rollout.n
-
                     # 1. Get Responses (Tensor)
                     response_ids = batch.batch["responses"]
 
@@ -1084,7 +1075,6 @@ class RayPPOTrainer:
                         answer_extractor = AnswerExtractor(dataset_type=dataset_type)
                         answer_comparator = AnswerComparator(dataset_type=dataset_type)
                         solution = answer_extractor.extract_answer(id=None, model_output=response_text)
-                        local_confidence = extract_confidence_level(response_text)
                         # ground_truth_extracted = answer_extractor.extract_answer(id=None, model_output=ground_truth)
                         if dataset_type == "webinstruct":
                             if 'integer' in data_id.lower():
@@ -1097,145 +1087,34 @@ class RayPPOTrainer:
 
                         local_correctness = 1 if compare_result == 'true' else 0
                         # Store correctness in non_tensor_batch
-                        # print("Assigning local_correctnesses...\n")
+                        print("Assigning local_correctnesses...\n")
                         if "local_correctnesses" not in batch.non_tensor_batch:
                             batch.non_tensor_batch["local_correctnesses"] = np.array([0] * len(response_ids), dtype=int)
-                        if "local_confidences" not in batch.non_tensor_batch:
-                            batch.non_tensor_batch["local_confidences"] = np.array([-1.0] * len(response_ids), dtype=float)
-                        if "model_output" not in batch.non_tensor_batch:
-                            batch.non_tensor_batch["model_output"] = np.array([""] * len(response_ids), dtype=object)
-                        
                         batch.non_tensor_batch["local_correctnesses"][i] = local_correctness
-                        batch.non_tensor_batch["local_confidences"][i] = local_confidence
-                        batch.non_tensor_batch["model_output"][i] = response_text
 
-                    # 4. Calculate Group Average Accuracy and Correlation (GRPO style)
+                    # 4. Calculate Group Average Accuracy (GRPO style)
                     # Check whether it is GRPO setting
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO:
                         # print("This is GRPO! =======================\n")
-                        
                         # We need to group by 'uid' because GRPO samples multiple responses per prompt.
                         uids = batch.non_tensor_batch["uid"]
                         local_correctnesses = batch.non_tensor_batch["local_correctnesses"]
-                        local_confidences = batch.non_tensor_batch["local_confidences"]
                         
                         # Create a mapping from uid to list of correctness scores
                         uid_to_scores = defaultdict(list)
-                        uid_to_confidences = defaultdict(list)
                         for i, uid in enumerate(uids):
-                            uid_to_scores[uid].append(local_correctnesses[i])  # {uid_A: [0, 1, 1, ...]}
-                            uid_to_confidences[uid].append(local_confidences[i]) # {uid_A: [0.9, 0.8, 0.8, ...]}
+                            uid_to_scores[uid].append(local_correctnesses[i])
                         
-                        # Calculate average score and correlation for each uid
-                        uid_to_avg_score = {}
-                        uid_to_corr = {}
-                        for uid, scores in uid_to_scores.items():
-                            uid_to_avg_score[uid] = np.mean(scores)
-                            confidences = uid_to_confidences[uid]
-                            # Calculate correlation if possible (requires variance in both)
-                            if len(scores) > 1 and np.std(scores) > 1e-9 and np.std(confidences) > 1e-9:
-                                uid_to_corr[uid] = np.corrcoef(scores, confidences)[0, 1]
-                            else:
-                                uid_to_corr[uid] = 0.0
-
+                        # Calculate average score for each uid
+                        uid_to_avg_score = {uid: np.mean(scores) for uid, scores in uid_to_scores.items()}
+                        
                         # Assign the group average score back to each sample
                         # This creates an array where every sample from the same prompt gets the same group average score
-                        group_avg_acc = np.array([uid_to_avg_score[uid] for uid in uids]) # if n=5, then group_avg_acc = [0.67,0.67,0.67,0.67,0.67,0.33,0.33,0.33,0.33,0.33,...]
-                        group_conf_corr = np.array([uid_to_corr[uid] for uid in uids])
+                        group_avg_acc = np.array([uid_to_avg_score[uid] for uid in uids])
                         
                         # Store it in non_tensor_batch so the reward function can access it
                         batch.non_tensor_batch["group_avg_acc"] = group_avg_acc
-                        batch.non_tensor_batch["group_correlation"] = group_conf_corr
                         # batch.non_tensor_batch keys: dict_keys(['dataset_type', 'index', 'generated_idx', 'data_id', 'extracted_answer', 'correctness', 'confidence', 'model_output', 'answer_type', 'valid', 'avg_valid', 'data_source', 'reward_model', 'extra_info', 'uid', 'multi_modal_inputs', 'tools_kwargs', 'local_correctnesses', 'group_avg_acc']) 
-
-                        # ================================= Customized Filtering =================================
-                        # Filter out groups that are all correct (1.0) or all incorrect (0.0)
-                        # This mimics DAPO's std > 0 filtering for binary outcomes
-                        filter_groups = True
-                        if filter_groups:
-                            num_gen_batches += 1
-                            
-                            # 1. Filter by group_avg_acc (DAPO style)
-                            # Keep indices where 0 < group_avg_acc < 1
-                            keep_indices_acc = np.where((group_avg_acc > 0.0) & (group_avg_acc < 1.0))[0]
-                            
-                            # 2. Filter by Adaptive Sampling
-                            # Only keep groups where cutoff_idx == n (i.e., all samples passed the confidence check)
-                            uids = batch.non_tensor_batch["uid"]
-                            model_outputs = batch.non_tensor_batch["model_output"]
-                            
-                            uid_to_indices = defaultdict(list)
-                            for i, uid in enumerate(uids):
-                                uid_to_indices[uid].append(i)
-                                
-                            keep_indices_adaptive = []
-                            for uid, indices in uid_to_indices.items():
-                                # Get responses for this group
-                                group_responses = [model_outputs[i] for i in indices]
-                                # Get cutoff index (0-based index of the last sample to keep)
-                                cutoff_idx = confidence_adaptive_sampling(group_responses)
-                                
-                                # Update total inference count (accumulate cutoff_idx + 1 for every prompt)
-                                self.total_inference_count += (cutoff_idx + 1)
-
-                                # Only keep the group if cutoff_idx is the last index (meaning all samples passed)
-                                if cutoff_idx == len(group_responses) - 1:
-                                    keep_indices_adaptive.extend(indices)
-                            
-                            keep_indices_adaptive = np.array(keep_indices_adaptive)
-                            
-                            # 3. Intersect the two filters
-                            if len(keep_indices_acc) > 0 and len(keep_indices_adaptive) > 0:
-                                keep_indices = np.intersect1d(keep_indices_acc, keep_indices_adaptive)
-                            else:
-                                keep_indices = np.array([])
-                            
-                            if len(keep_indices) > 0:
-                                filtered_batch = batch[keep_indices]
-                                # Update total kept prompts (count unique UIDs in the filtered batch)
-                                unique_kept_uids = len(np.unique(filtered_batch.non_tensor_batch["uid"])) # Should be equal to len(keep_indices) / n
-                                self.total_kept_prompts += unique_kept_uids
-                                
-                                print(f"Filtered batch size: {len(filtered_batch)} (kept {len(keep_indices)}/{len(group_avg_acc)})")
-                                print(f"  - Passed Acc Filter: {len(keep_indices_acc)}")
-                                print(f"  - Passed Adaptive Filter: {len(keep_indices_adaptive)}")
-                            else:
-                                print("Warning: All samples filtered out!")
-                                filtered_batch = None
-                            
-                            # Accumulate
-                            if accumulated_batch is None:
-                                accumulated_batch = filtered_batch
-                            elif filtered_batch is not None:
-                                accumulated_batch = DataProto.concat([accumulated_batch, filtered_batch])
-                                
-                            target_size = self.config.data.train_batch_size * self.config.actor_rollout_ref.rollout.n
-                            current_size = len(accumulated_batch) if accumulated_batch is not None else 0
-                            
-                            # Check if we have enough data or if we exceeded max_num_gen_batches
-                            max_gen_batches = 20  # You can adjust this limit
-                            max_gen_reached = num_gen_batches >= max_gen_batches
-                            
-                            if current_size < target_size and not max_gen_reached:
-                                print(f"Accumulating... {current_size}/{target_size} (Gen batch {num_gen_batches}/{max_gen_batches})")
-                                continue
-                            
-                            if max_gen_reached and current_size < target_size:
-                                print(f"Warning: Max generation batches ({max_gen_batches}) reached with only {current_size} samples.")
-                                if current_size == 0:
-                                    print("Skipping step due to empty batch.")
-                                    continue
-
-                            # We have enough data or forced to proceed
-                            # If we have more than needed, slice it. If less (due to max_gen_reached), take all.
-                            actual_batch_size = min(current_size, target_size)
-                            batch = accumulated_batch[:actual_batch_size]
-                            
-                            # Reset accumulation
-                            accumulated_batch = None 
-                            num_gen_batches = 0
-                            print(f"Batch filled. Proceeding with update. Size: {len(batch)}")
-                        # ================================= End of Filter =================================
 
                     # ================================= End of Xuqing's modification ========================================================
 
@@ -1448,15 +1327,6 @@ class RayPPOTrainer:
                     avg_score = sum(score) / len(score) if score else -1
                     metrics["training-core/reward"] = avg_score
 
-                if "group_correlation" in reward_extra_infos_dict:
-                    group_correlation_list = reward_extra_infos_dict["group_correlation"]
-                    avg_group_correlation = sum(group_correlation_list) / len(group_correlation_list) if group_correlation_list else 0.0
-                    metrics["training-core/average_group_correlation"] = avg_group_correlation
-
-                # Add global counters to metrics
-                metrics["training/total_kept_prompts"] = self.total_kept_prompts
-                metrics["training/total_inference_count"] = self.total_inference_count
-
                 metrics.update(
                     {
                         "training/global_step": self.global_steps,
@@ -1485,3 +1355,4 @@ class RayPPOTrainer:
                     self.reward_fn.assign_step(self.global_steps, self.total_training_steps)
                 if self.val_reward_fn is not None:
                     self.val_reward_fn.assign_step(self.global_steps, self.total_training_steps)
+
