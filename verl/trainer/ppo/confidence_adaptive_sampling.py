@@ -54,8 +54,8 @@ def data_list_probability_map(whole_data_list, threshold, scaling, batch_size=10
         # if i<=3:
         #     whether_pass = True
         pass_candidate.append(whether_pass)
-        if whether_pass:
-            print(f"Index {i}: P_value={prob:.4f} < threshold={threshold}, most two max confidence: {most_two_max_confidence_map}.")
+        if not whether_pass:
+            print(f"Index {i}: P_value={prob:.4f} > {threshold}, most two max confidence: {most_two_max_confidence_map}.")
     return P_values_candidate, pass_candidate
 
 

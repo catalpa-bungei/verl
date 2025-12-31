@@ -168,7 +168,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         known_signal = "unmatched"
 
     # print("solution_str:", solution_str,"\n")
-    print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_acc:", reference_accuracy, "| group acc:", group_avg_acc, "| current_step:", current_step, "| total_step:", total_step)
+    print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_acc:", reference_accuracy, "| group acc:", group_avg_acc, "group corr:", group_correlation, "| current_step:", current_step, "| total_step:", total_step)
     
     beta = 0.9
     alpha = 0
