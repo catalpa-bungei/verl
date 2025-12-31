@@ -1006,10 +1006,11 @@ class RayPPOTrainer:
 
         for epoch in range(self.config.trainer.total_epochs):
             accumulated_batch = None
+            timing_raw = {}
             num_gen_batches = 0
             for batch_dict in self.train_dataloader:
                 metrics = {}
-                timing_raw = {}
+                # timing_raw = {}
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
 
                 # pop those keys for generation
