@@ -401,7 +401,7 @@ if __name__ == "__main__":
     print(avg_test_time_list)
     print(accuracy_list)
 
-def confidence_adaptive_sampling(responses, threshold=0.96, scaling=10):
+def confidence_adaptive_sampling(responses, threshold=0.98, scaling=10):
     """
     Apply data_list_probability_map to a list of responses.
     Returns the index of the first False in pass_candidate (meaning we stop sampling).
