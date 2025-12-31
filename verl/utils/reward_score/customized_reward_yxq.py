@@ -101,6 +101,8 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     group_correlation = extra_info.get("group_correlation", 0)  # Default to 0 if not provided # Actually, group correlation is not used to calculate reward, so we can simply upload it in ray_trainer.py, no need to store it here.
     if not group_avg_acc:
         group_avg_acc = -1
+    if not group_correlation:
+        group_correlation = 0
     reference_accuracy = extra_info.get("reference_accuracy", -1)  # Default to -1 if not provided
     if reference_accuracy == -1:
         reference_tag = "unmatched"
