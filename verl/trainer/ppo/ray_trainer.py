@@ -1239,8 +1239,13 @@ class RayPPOTrainer:
                             actual_batch_size = min(current_size, target_size)
                             batch = accumulated_batch[:actual_batch_size]
                             
-                            # Reset accumulation
-                            accumulated_batch = None 
+                            # Reset accumulation or carry over remainder
+                            if current_size > actual_batch_size:
+                                accumulated_batch = accumulated_batch[actual_batch_size:]
+                                print(f"Carrying over {len(accumulated_batch)} samples to next step.")
+                            else:
+                                accumulated_batch = None 
+                            
                             num_gen_batches = 0
                             print(f"Batch filled. Proceeding with update. Size: {len(batch)}")
                         # ================================= End of Filter =================================
