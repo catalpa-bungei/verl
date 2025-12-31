@@ -1190,7 +1190,10 @@ class RayPPOTrainer:
                                 keep_indices = np.intersect1d(keep_indices_acc, keep_indices_adaptive)
                             else:
                                 keep_indices = np.array([])
-                            
+
+
+                            filter_rate = 1.0 - (len(keep_indices) / len(group_avg_acc))
+                            print(f"Generation Batch {num_gen_batches}: Filter Rate = {filter_rate*100:.2f}%")
                             if len(keep_indices) > 0:
                                 filtered_batch = batch[keep_indices]
                                 # Update total kept prompts (count unique UIDs in the filtered batch)
@@ -1219,7 +1222,11 @@ class RayPPOTrainer:
                             
                             if current_size < target_size and not max_gen_reached:
                                 print(f"Accumulating... {current_size}/{target_size} (Gen batch {num_gen_batches}/{max_gen_batches})")
+                                print("  - Total kept prompts so far: ", self.total_kept_prompts)
+                                print("  - Total inference count so far: ", self.total_inference_count)
                                 continue
+                            elif current_size >= target_size:
+                                print(f"Target batch size reached: {current_size}/{target_size}")
                             
                             if max_gen_reached and current_size < target_size:
                                 print(f"Warning: Max generation batches ({max_gen_batches}) reached with only {current_size} samples.")
