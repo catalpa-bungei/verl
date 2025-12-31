@@ -54,6 +54,8 @@ def data_list_probability_map(whole_data_list, threshold, scaling, batch_size=10
         # if i<=3:
         #     whether_pass = True
         pass_candidate.append(whether_pass)
+        if whether_pass:
+            print(f"Index {i}: P_value={prob:.4f} < threshold={threshold}, most two max confidence: {most_two_max_confidence_map}.")
     return P_values_candidate, pass_candidate
 
 
@@ -367,7 +369,7 @@ def most_two_max_confidence(data_list, scaling=10):
     #     "first": [final_answer, max_confidence_sum/10, normalized_max_confidence_sum],
     #     "second": [second_final_answer, second_max_confidence_sum/10, normalized_second_max_confidence_sum]
     # }
-    print(most_two_max_confidence_map)
+    # print(most_two_max_confidence_map)
     return most_two_max_confidence_map
 
 def prob_asc(a,b):
