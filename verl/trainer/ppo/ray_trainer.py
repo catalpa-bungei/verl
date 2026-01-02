@@ -1158,7 +1158,7 @@ class RayPPOTrainer:
                             
                             # 1. Filter by group_avg_acc (DAPO style)
                             # Keep indices where 0 < group_avg_acc < 1
-                            keep_indices_acc = np.where((group_avg_acc > 0.0) & (group_avg_acc < 1.0))[0]
+                            keep_indices_acc = np.where((group_avg_acc >= 0.0) & (group_avg_acc < 1.0))[0]
                             
                             # 2. Filter by Adaptive Sampling
                             # Only keep groups where cutoff_idx == n (i.e., all samples passed the confidence check)
