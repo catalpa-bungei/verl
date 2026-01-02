@@ -1498,3 +1498,8 @@ class RayPPOTrainer:
                     self.reward_fn.assign_step(self.global_steps, self.total_training_steps)
                 if self.val_reward_fn is not None:
                     self.val_reward_fn.assign_step(self.global_steps, self.total_training_steps)
+
+            # Save checkpoint at the end of each epoch
+            if self.config.trainer.save_freq > 0:
+                 with _timer("save_checkpoint", timing_raw):
+                    self._save_checkpoint()
