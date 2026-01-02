@@ -1500,6 +1500,6 @@ class RayPPOTrainer:
                     self.val_reward_fn.assign_step(self.global_steps, self.total_training_steps)
 
             # Save checkpoint at the end of each epoch
-            if self.config.trainer.save_freq > 0:
+            if self.config.trainer.save_freq > 0 and filter_groups:
                  with _timer("save_checkpoint", timing_raw):
                     self._save_checkpoint()
