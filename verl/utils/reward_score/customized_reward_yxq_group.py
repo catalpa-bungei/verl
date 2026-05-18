@@ -169,7 +169,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     
     beta = 0.5
     alpha = 0
-    w_ece = 0.5
+    w_ece = 0.1
     w_diversity = 0
     known_correct_tag = ""
     whether_ece = True
@@ -190,7 +190,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         current_ece_score = 0
         reference_ece_score = 0
     else:
-        current_ece_score = 0.5 - abs(current_accuracy - confidence_level / range)  # ECE score based on confidence level
+        current_ece_score = 1 - abs(current_accuracy - confidence_level / range)  # ECE score based on confidence level
         current_ece_score_0 = 1 - abs(current_accuracy_0 - confidence_level / range)  # ECE score based on current accuracy 0/1
         reference_ece_score = 1 - abs(reference_accuracy - confidence_level / range)  # Reference ECE score based on reference accuracy
     if whether_reference:
@@ -202,25 +202,25 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     if whether_ece:
         if known_signal == "known":
             if correctness == "correct":
-                if current_accuracy > 0.5: 
+                # if current_accuracy > 0.5: 
                     score = 0.9 + format_score + beta + ece_score 
                     known_correct_tag = "-> known_correct"
-                elif current_accuracy <= 0.5:
-                    score = 0.9 + format_score + beta
-                    known_correct_tag = "-> known_correct"                                
+                # elif current_accuracy <= 0.5:
+                #     score = 0.9 + format_score + beta
+                #     known_correct_tag = "-> known_correct"                                
             elif correctness == "incorrect":
-                if current_accuracy > 0.5:
-                    score = 0 + format_score - beta
-                    known_correct_tag = "-> known_incorrect"                 
+                # if current_accuracy > 0.5:
+                score = 0 + format_score - beta + ece_score
+                known_correct_tag = "-> known_incorrect"                 
         elif known_signal == "unknown":
             if correctness == "correct":
-                score =  0.9 + format_score - beta
+                score =  0.9 + format_score - beta + ece_score
                 known_correct_tag = "-> unknown_correct"
             elif correctness == "incorrect":
-                if current_accuracy > 0.5:
-                    score =  0 + format_score + beta
-                    known_correct_tag = "-> unknown_incorrect"
-                elif current_accuracy <= 0.5:
+                # if current_accuracy > 0.5:
+                    # score =  0 + format_score + beta
+                    # known_correct_tag = "-> unknown_incorrect"
+                # elif current_accuracy <= 0.5:
                     score =  0 + format_score + beta + ece_score
                     known_correct_tag = "-> unknown_incorrect"
         else:

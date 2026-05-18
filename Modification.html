@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modification</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --text: #1f2933;
+      --muted: #52606d;
+      --border: #d9e2ec;
+      --code-bg: #111827;
+      --code-text: #e5e7eb;
+      --inline-bg: #e8eef6;
+      --accent: #2563eb;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 48px 24px 72px;
+    }
+
+    h1 {
+      margin: 0 0 28px;
+      font-size: 40px;
+      line-height: 1.15;
+    }
+
+    h2 {
+      margin: 40px 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 26px;
+    }
+
+    h3 {
+      margin: 32px 0 12px;
+      font-size: 20px;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul {
+      margin: 0 0 18px 24px;
+      padding: 0;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: var(--inline-bg);
+      color: #0f172a;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      margin: 14px 0 20px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      border-radius: 8px;
+      background: var(--code-bg);
+      color: var(--code-text);
+      line-height: 1.45;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      font-size: 14px;
+    }
+
+    .note {
+      margin: 20px 0;
+      padding: 14px 16px;
+      border-left: 4px solid var(--accent);
+      background: #eef4ff;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Modification</h1>
+
+    <h2>Varying Trajectory Number Per Sample</h2>
+
+    <p>The customized GRPO filtering in <code>verl/trainer/ppo/ray_trainer.py</code> now supports keeping a variable number of trajectories for each prompt/sample.</p>
+
+    <ul>
+      <li>Adaptive filtering keeps trajectories through the first failed confidence check: <code>indices[:cutoff_idx + 1]</code>.</li>
+      <li>This means one <code>uid</code> group may keep fewer than <code>rollout.n</code> trajectories.</li>
+      <li>GRPO remains compatible because advantage computation groups samples by <code>uid</code>, not by fixed-size chunks of <code>rollout.n</code>.</li>
+      <li>Group statistics such as <code>group_avg_acc</code> and <code>group_correlation</code> are recomputed after filtering, so reward computation sees the truncated group actually used for training.</li>
+      <li>Accumulated batches are popped only at whole-<code>uid</code> group boundaries. This avoids splitting one prompt group across two PPO updates.</li>
+      <li>The final training batch must also satisfy framework batch-size constraints, including DP partitioning, actor PPO mini-batch size, and log-prob micro-batch sizes.</li>
+      <li>No fake/default trajectories are added. If there are not enough real kept trajectories to form a compatible batch, the trainer keeps accumulating until it can form one, or skips the update after the generation limit.</li>
+    </ul>
+
+    <h3>Strict DAPO Filter</h3>
+
+    <p>The correctness filter is strict:</p>
+
+    <pre><code>keep_indices_acc = np.where((group_avg_acc &gt; 0.0) &amp; (group_avg_acc &lt; 1.0))[0]</code></pre>
+
+    <p>This intentionally removes all-correct groups (<code>group_avg_acc == 1.0</code>) and all-wrong groups (<code>group_avg_acc == 0.0</code>), matching the DAPO-style idea of keeping groups with non-zero outcome variance.</p>
+
+    <h3>Example: Keeping Trajectories Until First False</h3>
+
+    <p>If <code>rollout.n = 4</code> and adaptive sampling returns <code>cutoff_idx = 2</code>, the trainer keeps:</p>
+
+    <pre><code>uid A: A0 A1 A2</code></pre>
+
+    <p>It drops only the later trajectories:</p>
+
+    <pre><code>dropped: A3</code></pre>
+
+    <p>The first failed trajectory is included because the cutoff happens after observing it:</p>
+
+    <pre><code>keep_indices_adaptive.extend(indices[: cutoff_idx + 1])</code></pre>
+
+    <h3>Example: Avoid Splitting a GRPO Group</h3>
+
+    <p>After adaptive filtering, each prompt may keep a different number of trajectories:</p>
+
+    <pre><code>uid A: A0 A1 A2        # kept 3
+uid B: B0 B1           # kept 2
+uid C: C0 C1 C2 C3     # kept 4
+uid D: D0              # kept 1</code></pre>
+
+    <p>The accumulated batch is ordered as:</p>
+
+    <pre><code>[A0, A1, A2, B0, B1, C0, C1, C2, C3, D0]</code></pre>
+
+    <p>If <code>target_size = 6</code>, a raw slice would produce:</p>
+
+    <pre><code>[A0, A1, A2, B0, B1, C0]</code></pre>
+
+    <p>That would split <code>uid C</code>, leaving <code>C1 C2 C3</code> outside this PPO update. Since GRPO advantage is grouped by <code>uid</code>, this would make <code>C0</code> behave like a singleton group in the current update.</p>
+
+    <p>Instead, the trainer pops only at whole-<code>uid</code> boundaries. Valid boundaries in this example are:</p>
+
+    <pre><code>end = 3  -&gt; [A0, A1, A2]
+end = 5  -&gt; [A0, A1, A2, B0, B1]
+end = 9  -&gt; [A0, A1, A2, B0, B1, C0, C1, C2, C3]
+end = 10 -&gt; all groups</code></pre>
+
+    <p>For <code>target_size = 6</code>, it may choose <code>end = 5</code> instead of cutting at <code>6</code>:</p>
+
+    <pre><code>training batch: [A0, A1, A2, B0, B1]
+carry over:     [C0, C1, C2, C3, D0]</code></pre>
+
+    <h3>Example: Batch Divisor Compatibility</h3>
+
+    <p>The trainer does not add default or fake trajectories. It waits until it can form a real batch whose size is compatible with downstream splitting.</p>
+
+    <p>Example:</p>
+
+    <pre><code>world_size = 8
+rollout.n = 4
+actor.ppo_mini_batch_size = 16 prompts
+actor update mini-batch after rollout = 16 * 4 = 64 trajectories
+rollout log_prob_micro_batch_size = 32
+ref log_prob_micro_batch_size = 32</code></pre>
+
+    <p>The required divisor is:</p>
+
+    <pre><code>lcm(8, 64, 32, 32) = 64</code></pre>
+
+    <p>So the final filtered training batch must contain <code>64</code>, <code>128</code>, <code>192</code>, ... real trajectories. If the accumulated filtered data has <code>70</code> trajectories, the trainer looks for the largest prefix that:</p>
+
+    <ul>
+      <li>ends at a whole-<code>uid</code> boundary,</li>
+      <li>is not larger than the target size,</li>
+      <li>has length divisible by <code>64</code>.</li>
+    </ul>
+
+    <p>If no such prefix exists yet, the trainer continues accumulating more real filtered trajectories. If the generation limit is reached and no compatible prefix can be formed, the update is skipped rather than padded with fake data.</p>
+  </main>
+</body>
+</html>

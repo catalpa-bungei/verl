@@ -2,9 +2,10 @@
 
 set -x
 ENGINE=${1:-vllm}
-export PYTHONPATH=/fs-computility/wangxuhong/yangxuqing/
-export http_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
-export https_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
+export PYTHONPATH=/mnt/shared-storage-user/yangxuqing
+export http_proxy=http://yangxuqing:6cbzFONHNvLv0uKjS70E8ST33Gy83xum2NvHpjMlBnfHPqXHKXWBZWZp6qcW@10.1.20.50:23128
+export https_proxy=http://yangxuqing:6cbzFONHNvLv0uKjS70E8ST33Gy83xum2NvHpjMlBnfHPqXHKXWBZWZp6qcW@10.1.20.50:23128
+export WANDB_API_KEY=f49497a793fd30f43cd1d8279cde35b43c3dd7c8
 # c2rm_train_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/train_promptv7.parquet
 # c2rm_test_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/test_promptv7.parquet
 
@@ -61,7 +62,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_grpo_text-test0.01_llama-3.2-3b-Instruct_promptv8_T5_temp0.7' \
-    trainer.experiment_name='text-RLCR' \
+    trainer.experiment_name='text-RLCR_20260103' \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=55 \

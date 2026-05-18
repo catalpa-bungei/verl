@@ -165,7 +165,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_accuracy:", reference_accuracy, "| current_step:", current_step, "| total_step:", total_step)
     
     beta = 0
-    alpha = 0
+    alpha = 0.5
     w_ece = 1
     w_diversity = 0
     known_correct_tag = ""

@@ -401,7 +401,7 @@ if __name__ == "__main__":
     print(avg_test_time_list)
     print(accuracy_list)
 
-def confidence_adaptive_sampling(responses, threshold=0.99, scaling=10):
+def confidence_adaptive_sampling(responses, threshold=0.999, scaling=10):
     """
     Apply data_list_probability_map to a list of responses.
     Returns the index of the first False in pass_candidate (meaning we stop sampling).
@@ -412,6 +412,7 @@ def confidence_adaptive_sampling(responses, threshold=0.99, scaling=10):
     
     P_values, pass_candidates = data_list_probability_map(data_list, threshold, scaling, batch_size=len(responses))
     try:
+        # note that the data at first_false_index is kept in CSC
         first_false_index = pass_candidates.index(False)
         return first_false_index
     except ValueError:
