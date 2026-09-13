@@ -5,7 +5,7 @@ ENGINE=${1:-vllm}
 export PYTHONPATH=/mnt/shared-storage-gpfs2/evobox-share-gpfs2/yangxuqing
 export http_proxy=http://localusr:localpass@100.96.31.230:39111
 export https_proxy=http://localusr:localpass@100.96.31.230:39111
-export WANDB_API_KEY=f49497a793fd30f43cd1d8279cde35b43c3dd7c8
+export WANDB_API_KEY="${WANDB_API_KEY:?Set WANDB_API_KEY in the environment}"
 # c2rm_train_path=/mnt/shared-storage-gpfs2/evobox-share-gpfs2/yangxuqing/C2RM/data_C2RM/q/qwen7b/train_promptv7.parquet
 # c2rm_test_path=/mnt/shared-storage-gpfs2/evobox-share-gpfs2/yangxuqing/C2RM/data_C2RM/q/qwen7b/test_promptv7.parquet
 
@@ -33,7 +33,7 @@ python3 -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     data.image_key=images \
-    actor_rollout_ref.model.path=/mnt/shared-storage-gpfs2/evobox-share-gpfs2/yangxuqing/models/Qwen2.5VL-7B-Instruct/5b5eecc7efc2c3e86839993f2689bbbdf06bd8d4 \
+    actor_rollout_ref.model.path=/mnt/shared-storage-gpfs2/evobox-share-gpfs2/yangxuqing/models/Qwen3-4B \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=256 \
@@ -56,14 +56,14 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.n=5 \
     actor_rollout_ref.rollout.max_num_seqs=400 \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
-    custom_reward_function.path=/mnt/shared-storage-gpfs2/evobox-share-gpfs2/yangxuqing/verl/verl/utils/reward_score/customized_reward_yxq.py \
+    custom_reward_function.path=/mnt/shared-storage-gpfs2/evobox-share-gpfs2/yangxuqing/verl/verl/utils/reward_score/Brier_RLVRreward.py \
     custom_reward_function.name=compute_score_reference_data \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='verl_grpo_text-test0.01_qwen2.5vl-7b_promptv8_T5_temp0.7' \
-    trainer.experiment_name='text-beta0.5_T5_n5' \
-    trainer.n_gpus_per_node=4 \
+    trainer.project_name='verl_grpo_text-test0.01_qwen3-4b_promptv8_T5_temp0.7' \
+    trainer.experiment_name='text-qwen3-4b-RLCR_n5' \
+    trainer.n_gpus_per_node=2 \
     trainer.nnodes=1 \
     trainer.save_freq=110 \
     trainer.test_freq=10 \

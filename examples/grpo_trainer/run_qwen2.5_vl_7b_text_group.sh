@@ -3,8 +3,8 @@
 set -x
 ENGINE=${1:-vllm}
 export PYTHONPATH=/mnt/shared-storage-user/yangxuqing
-export http_proxy=http://yangxuqing:6cbzFONHNvLv0uKjS70E8ST33Gy83xum2NvHpjMlBnfHPqXHKXWBZWZp6qcW@10.1.20.50:23128
-export https_proxy=http://yangxuqing:6cbzFONHNvLv0uKjS70E8ST33Gy83xum2NvHpjMlBnfHPqXHKXWBZWZp6qcW@10.1.20.50:23128
+export http_proxy=http://localusr:localpass@100.96.31.230:39111
+export https_proxy=http://localusr:localpass@100.96.31.230:39111
 export WANDB_API_KEY=f49497a793fd30f43cd1d8279cde35b43c3dd7c8
 # c2rm_train_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/train_promptv7.parquet
 # c2rm_test_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/test_promptv7.parquet

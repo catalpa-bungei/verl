@@ -41,7 +41,6 @@ class Tracking:
         if "tracking" in default_backend or "wandb" in default_backend:
             import wandb
 
-            # wandb.init(project=project_name, name=experiment_name, config=config)
             wandb.init(project=project_name, name=experiment_name, config=config, mode="offline")
             self.logger["wandb"] = wandb
 
@@ -71,7 +70,7 @@ class Tracking:
             SWANLAB_MODE = os.environ.get("SWANLAB_MODE", "cloud")
             if SWANLAB_API_KEY:
                 swanlab.login(SWANLAB_API_KEY)  # NOTE: previous login information will be overwritten
-            
+
             if config is None:
                 config = {} # make sure config is not None, otherwise **config will raise error
             swanlab.init(
@@ -298,13 +297,13 @@ class ValidationGenerationsLogger:
         for i, sample in enumerate(samples):
             row_text = f"""
             input: {sample[0]}
-            
+
             ---
-            
+
             output: {sample[1]}
-            
+
             ---
-            
+
             score: {sample[2]}
             """
             swanlab_text_list.append(swanlab.Text(row_text, caption=f"sample {i + 1}"))

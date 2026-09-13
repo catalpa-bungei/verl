@@ -20,10 +20,10 @@ random_numbers = np.random.rand(64).tolist()
 def extract_confidence(model_output: str):
     """
     Extract confidence level from the model output.
-    
+
     Args:
         model_output (str): The output string from the model.
-        
+
     Returns:
         Optional[int]: The confidence level as an integer, or None if not found.
     """
@@ -65,7 +65,7 @@ def data_list_probability_map(whole_data_list, threshold, scaling, batch_size=10
 def calc_acc(input_jsonl_file: str, params: list) -> float:
     """Calculate accuracy from the JSONL file.
     The Jsonl file is a list of dicts
-    
+
     """
     with open(input_jsonl_file, 'r') as f:
         data = json.load(f)
@@ -152,7 +152,7 @@ def calc_acc(input_jsonl_file: str, params: list) -> float:
         #     uncertain_data_num += 1
         # else:
         #     pass
-        
+
         # if first_false_index == 0:
         #     limited_range = 64
         # else:
@@ -165,7 +165,7 @@ def calc_acc(input_jsonl_file: str, params: list) -> float:
 
         answer_confidence_map = {}
         answer_number_map = {}
-    
+
         for item in data_batch:
             test_time += 1
             batch_item_index = item.get("batch_item_index", -1)
@@ -175,7 +175,7 @@ def calc_acc(input_jsonl_file: str, params: list) -> float:
             if format_prediction:
                 prediction = format_prediction
                 # prediction = answer_extractor._extract_first_option(format_prediction)
-            else: 
+            else:
                 prediction = "None"
             if not prediction:
                 prediction = format_prediction if format_prediction else "None"
@@ -260,7 +260,7 @@ def calc_acc(input_jsonl_file: str, params: list) -> float:
             # "certain accuracy": certain_accuracy,
             "uncertain number": uncertain_data_num,
             # "uncertain accuracy": uncertain_accuracy,
-            "ece": ece, 
+            "ece": ece,
             "tag distribution": tag_distribution,
         }
     print(output_dict)
@@ -281,7 +281,7 @@ def most_two_max_confidence(data_list, scaling=10):
         if format_prediction:
             prediction = format_prediction
             # prediction = answer_extractor._extract_first_option(format_prediction)
-        else: 
+        else:
             prediction = "None"
         if not prediction:
             prediction = format_prediction if format_prediction else "None"
@@ -359,7 +359,7 @@ def most_two_max_confidence(data_list, scaling=10):
         "first": [final_answer, max_confidence_sum/scaling],
         "second": [second_final_answer, second_max_confidence_sum/scaling]
     }
-   
+
     # most_two_max_confidence_map = {
     #     "first": [final_answer, abs(max_confidence_sum - first_list_length * 5.5)/5.5],
     #     "second": [second_final_answer, abs(second_max_confidence_sum - second_list_length * 5.5)/5.5]
@@ -401,7 +401,7 @@ if __name__ == "__main__":
     print(avg_test_time_list)
     print(accuracy_list)
 
-def confidence_adaptive_sampling(responses, threshold=0.999, scaling=10):
+def confidence_adaptive_sampling(responses, threshold=0.99, scaling=10):
     """
     Apply data_list_probability_map to a list of responses.
     Returns the index of the first False in pass_candidate (meaning we stop sampling).
@@ -409,7 +409,7 @@ def confidence_adaptive_sampling(responses, threshold=0.999, scaling=10):
     """
     # Wrap strings into dicts expected by most_two_max_confidence
     data_list = [{"model_output": r} for r in responses]
-    
+
     P_values, pass_candidates = data_list_probability_map(data_list, threshold, scaling, batch_size=len(responses))
     try:
         # note that the data at first_false_index is kept in CSC

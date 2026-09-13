@@ -62,7 +62,7 @@ from verl.utils.tracking import ValidationGenerationsLogger
 from verl.workers.rollout.async_server import AsyncLLMServerManager
 
 from post_processing.processing.answer_extraction import AnswerExtractor
-from post_processing.processing.answer_comparison import AnswerComparator 
+from post_processing.processing.answer_comparison import AnswerComparator
 from verl.utils.reward_score.customized_reward_yxq import convert_to_dataset_type, extract_confidence_level
 from verl.trainer.ppo.confidence_adaptive_sampling import confidence_adaptive_sampling
 
@@ -716,7 +716,7 @@ class RayPPOTrainer:
                         metric_sec = "val-aux"
                     pfx = f"{metric_sec}/{data_source}/{var_name}/{metric_name}"
                     metric_dict[pfx] = metric_val
-        
+
         # calculate the ratio of all_correct_known_correct, all_correct_known_incorrect, all_correct_unknown_correct and all_correct_unknown_incorrect
         # and all_wrong_known_correct, all_wrong_known_incorrect, all_wrong_unknown_correct and all_wrong_unknown_incorrect
         # and partial_correct_known_correct, partial_correct_known_incorrect, partial_correct_unknown_correct and partial_correct_unknown_incorrect
@@ -764,7 +764,7 @@ class RayPPOTrainer:
                 metric_dict["val-aux/partial_correct -> unknown_correct_ratio"] = partial_correct_unknown_correct / total
                 metric_dict["val-aux/partial_correct -> unknown_incorrect_ratio"] = partial_correct_unknown_incorrect / total
                 metric_dict["val-aux/unmatched_known_ratio"] = unmatched_known / total
-        else: 
+        else:
             print("Warning: 'known_correct_tag' not found in reward_extra_infos_dict, skipping known tag ratio calculation.")
 
         if "confidence_level" in reward_extra_infos_dict:
@@ -793,7 +793,7 @@ class RayPPOTrainer:
             incorrect_count = correctness.count("incorrect")
             metric_dict["val-core/correctness_ratio"] = correct_count / total if total > 0 else -1
             metric_dict["val-aux/incorrectness_ratio"] = incorrect_count / total if total > 0 else -1
-        
+
         if "unique_confidence_ratio" in reward_extra_infos_dict:
             metric_dict["val-core/latest_unique_confidence_ratio"] = reward_extra_infos_dict["unique_confidence_ratio"][-1] if reward_extra_infos_dict["unique_confidence_ratio"] else -1
 
@@ -978,60 +978,6 @@ class RayPPOTrainer:
         global_balance_stats = log_seqlen_unbalance(seqlen_list=global_seqlen_lst, partitions=global_partition_lst, prefix=logging_prefix)
         metrics.update(global_balance_stats)
 
-    def _get_grpo_batch_divisor(self):
-        """Batch sizes must remain compatible with DP dispatch and PPO mini-batches."""
-        rollout_n = self.config.actor_rollout_ref.rollout.n
-        divisor = self.actor_rollout_wg.world_size
-        actor_mini_batch_size = self.config.actor_rollout_ref.actor.ppo_mini_batch_size * rollout_n
-        divisor = int(np.lcm(divisor, actor_mini_batch_size))
-
-        def include_micro_batch(config_node, key, per_gpu_key):
-            nonlocal divisor
-            micro_batch_size = config_node.get(key, None)
-            if micro_batch_size is None:
-                micro_batch_size_per_gpu = config_node.get(per_gpu_key, None)
-                if micro_batch_size_per_gpu is None:
-                    return
-                micro_batch_size = micro_batch_size_per_gpu * self.actor_rollout_wg.world_size
-            divisor = int(np.lcm(divisor, micro_batch_size))
-
-        if not self.config.actor_rollout_ref.rollout.log_prob_use_dynamic_bsz:
-            include_micro_batch(
-                self.config.actor_rollout_ref.rollout,
-                "log_prob_micro_batch_size",
-                "log_prob_micro_batch_size_per_gpu",
-            )
-        if self.use_reference_policy and not self.config.actor_rollout_ref.ref.log_prob_use_dynamic_bsz:
-            include_micro_batch(
-                self.config.actor_rollout_ref.ref,
-                "log_prob_micro_batch_size",
-                "log_prob_micro_batch_size_per_gpu",
-            )
-        return divisor
-
-    def _pop_compatible_uid_prefix(self, batch: Optional[DataProto], max_size: int, divisor: int):
-        """Pop a prefix that ends on a uid boundary and satisfies framework divisibility."""
-        if batch is None or len(batch) == 0:
-            return None, batch
-
-        uids = batch.non_tensor_batch["uid"]
-        best_end = 0
-        for end in range(1, len(batch) + 1):
-            is_group_boundary = end == len(batch) or uids[end] != uids[end - 1]
-            if not is_group_boundary:
-                continue
-            if end > max_size:
-                break
-            if end % divisor == 0:
-                best_end = end
-
-        if best_end == 0:
-            return None, batch
-
-        selected_batch = batch[:best_end]
-        remaining_batch = batch[best_end:] if best_end < len(batch) else None
-        return selected_batch, remaining_batch
-
     def fit(self):
         """
         The training loop of PPO.
@@ -1060,7 +1006,7 @@ class RayPPOTrainer:
         if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
             # Xuqing's modification
             self.val_reward_fn.assign_step(self.global_steps, self.total_training_steps)
-            
+
             val_metrics = self._validate()
             assert val_metrics, f"{val_metrics=}"
             pprint(f"Initial validation metrics: {val_metrics}")
@@ -1084,7 +1030,8 @@ class RayPPOTrainer:
         # Xuqing's modification: Initialize accumulation counters for kept prompts and inference count
         self.total_kept_prompts = 0
         self.total_inference_count = 0
-        filter_groups = True
+        filled_batch_count = 0
+        filter_groups = False
 
         for epoch in range(self.config.trainer.total_epochs):
             accumulated_batch = None
@@ -1144,7 +1091,7 @@ class RayPPOTrainer:
 
                     #================================ Xuqing's modification: assign correctness to each sample in the batch =============================
                     # from post_processing.processing.answer_extraction import AnswerExtractor
-                    # from post_processing.processing.answer_comparison import AnswerComparator 
+                    # from post_processing.processing.answer_comparison import AnswerComparator
 
                     # Note that batch has been repeated according to rollout.n
 
@@ -1172,7 +1119,7 @@ class RayPPOTrainer:
                         if dataset_type == "webinstruct":
                             if 'integer' in data_id.lower():
                                 answer_type = "Integer"
-                            else: 
+                            else:
                                 raise ValueError("Unsupported answer type for webinstruct dataset.")
                             compare_result = answer_comparator.compare_webinstruct_answer(solution, ground_truth, answer_type)
                         else:
@@ -1187,7 +1134,7 @@ class RayPPOTrainer:
                             batch.non_tensor_batch["local_confidences"] = np.array([-1.0] * len(response_ids), dtype=float)
                         if "model_output" not in batch.non_tensor_batch:
                             batch.non_tensor_batch["model_output"] = np.array([""] * len(response_ids), dtype=object)
-                        
+
                         batch.non_tensor_batch["local_correctnesses"][i] = local_correctness
                         batch.non_tensor_batch["local_confidences"][i] = local_confidence
                         batch.non_tensor_batch["model_output"][i] = response_text
@@ -1196,53 +1143,53 @@ class RayPPOTrainer:
                     # Check whether it is GRPO setting
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.GRPO:
                         # print("This is GRPO! =======================\n")
-                        
+
                         # We need to group by 'uid' because GRPO samples multiple responses per prompt.
                         # Assign the group average score back to each sample
                         # This creates an array where every sample from the same prompt gets the same group average score
                         batch = _update_group_stats(batch)
                         group_avg_acc = batch.non_tensor_batch["group_avg_acc"] # if n=5, then group_avg_acc = [0.67,0.67,0.67,0.67,0.67,0.33,0.33,0.33,0.33,0.33,...]
                         group_conf_corr = batch.non_tensor_batch["group_correlation"]
-                        
+
                         # Store it in non_tensor_batch so the reward function can access it
                         batch.non_tensor_batch["group_avg_acc"] = group_avg_acc
                         batch.non_tensor_batch["group_correlation"] = group_conf_corr
-                        # batch.non_tensor_batch keys: dict_keys(['dataset_type', 'index', 'generated_idx', 'data_id', 'extracted_answer', 'correctness', 'confidence', 'model_output', 'answer_type', 'valid', 'avg_valid', 'data_source', 'reward_model', 'extra_info', 'uid', 'multi_modal_inputs', 'tools_kwargs', 'local_correctnesses', 'group_avg_acc']) 
+                        # batch.non_tensor_batch keys: dict_keys(['dataset_type', 'index', 'generated_idx', 'data_id', 'extracted_answer', 'correctness', 'confidence', 'model_output', 'answer_type', 'valid', 'avg_valid', 'data_source', 'reward_model', 'extra_info', 'uid', 'multi_modal_inputs', 'tools_kwargs', 'local_correctnesses', 'group_avg_acc'])
 
                         # ================================= Customized Filtering =================================
                         # Filter out groups that are all correct (1.0) or all incorrect (0.0)
                         # This mimics DAPO's std > 0 filtering for binary outcomes
                         if filter_groups:
                             num_gen_batches += 1
-                            
+
                             # 1. Filter by group_avg_acc (DAPO style)
                             # Keep only mixed groups; all-correct/all-wrong groups have zero outcome variance.
-                            keep_indices_acc = np.where((group_avg_acc > 0.0) & (group_avg_acc < 1.0))[0]
-                            
+                            keep_indices_acc = np.where((group_avg_acc >= 0.0) & (group_avg_acc <= 1.0))[0]
+
                             # 2. Filter by Adaptive Sampling
                             # Keep each group's prefix through the first failed confidence check.
                             uids = batch.non_tensor_batch["uid"]
                             model_outputs = batch.non_tensor_batch["model_output"]
-                            
+
                             uid_to_indices = defaultdict(list)
                             for i, uid in enumerate(uids):
                                 uid_to_indices[uid].append(i)
-                                
+
                             keep_indices_adaptive = []
                             for uid, indices in uid_to_indices.items():
                                 # Get responses for this group
                                 group_responses = [model_outputs[i] for i in indices]
                                 # Get cutoff index (0-based index of the last sample to keep)
                                 cutoff_idx = confidence_adaptive_sampling(group_responses)
-                                
+
                                 # Update total inference count (accumulate cutoff_idx + 1 for every prompt)
                                 self.total_inference_count += (cutoff_idx + 1)
 
                                 # Keep trajectories through the first failed confidence check.
                                 keep_indices_adaptive.extend(indices[: cutoff_idx + 1])
-                            
+
                             keep_indices_adaptive = np.array(keep_indices_adaptive)
-                            
+
                             # 3. Intersect the two filters
                             if len(keep_indices_acc) > 0 and len(keep_indices_adaptive) > 0:
                                 keep_indices = np.intersect1d(keep_indices_acc, keep_indices_adaptive)
@@ -1258,27 +1205,27 @@ class RayPPOTrainer:
                                 # Update total kept prompts (count unique UIDs in the filtered batch)
                                 unique_kept_uids = len(np.unique(filtered_batch.non_tensor_batch["uid"])) # Should be equal to len(keep_indices) / n
                                 self.total_kept_prompts += unique_kept_uids
-                                
+
                                 print(f"Filtered batch size: {len(filtered_batch)} (kept {len(keep_indices)}/{len(group_avg_acc)})")
                                 print(f"  - Passed Acc Filter: {len(keep_indices_acc)}")
                                 print(f"  - Passed Adaptive Filter: {len(keep_indices_adaptive)}")
                             else:
                                 print("Warning: All samples filtered out!")
                                 filtered_batch = None
-                            
+
                             # Accumulate
                             if accumulated_batch is None:
                                 accumulated_batch = filtered_batch
                             elif filtered_batch is not None:
                                 accumulated_batch = DataProto.concat([accumulated_batch, filtered_batch])
-                                
+
                             target_size = self.config.data.train_batch_size * self.config.actor_rollout_ref.rollout.n
                             current_size = len(accumulated_batch) if accumulated_batch is not None else 0
-                            
+
                             # Check if we have enough data or if we exceeded max_num_gen_batches
                             max_gen_batches = 20  # You can adjust this limit
                             max_gen_reached = num_gen_batches >= max_gen_batches
-                            
+
                             if current_size < target_size and not max_gen_reached:
                                 print(f"Accumulating... {current_size}/{target_size} (Gen batch {num_gen_batches}/{max_gen_batches})")
                                 print("  - Total kept prompts so far: ", self.total_kept_prompts)
@@ -1286,31 +1233,34 @@ class RayPPOTrainer:
                                 continue
                             elif current_size >= target_size:
                                 print(f"Target batch size reached: {current_size}/{target_size}")
-                            
+
                             if max_gen_reached and current_size < target_size:
                                 print(f"Warning: Max generation batches ({max_gen_batches}) reached with only {current_size} samples.")
                                 if current_size == 0:
                                     print("Skipping step due to empty batch.")
                                     continue
 
-                            # We have enough data or are forced to proceed. Pop only whole uid groups and
-                            # keep the resulting size compatible with DP dispatch and PPO mini-batches.
-                            batch_divisor = self._get_grpo_batch_divisor()
-                            pop_size = current_size if max_gen_reached else target_size
-                            batch, accumulated_batch = self._pop_compatible_uid_prefix(accumulated_batch, pop_size, batch_divisor)
-                            if batch is None:
-                                print(f"Warning: No compatible whole-group batch found yet. Need size multiple of {batch_divisor}.")
-                                if max_gen_reached:
-                                    print("Skipping step because accumulated batch cannot satisfy GRPO batch-size constraints.")
-                                    accumulated_batch = None
-                                    num_gen_batches = 0
-                                continue
+                            # We have enough data or forced to proceed.
+                            # Slice by raw sample count; this may cut through the middle of a uid group.
+                            actual_batch_size = min(current_size, target_size)
+                            batch = accumulated_batch[:actual_batch_size]
                             batch = _update_group_stats(batch)
-                            if accumulated_batch is not None:
+
+                            # Reset accumulation or carry over remainder
+                            if current_size > actual_batch_size:
+                                accumulated_batch = accumulated_batch[actual_batch_size:]
                                 print(f"Carrying over {len(accumulated_batch)} samples to next step.")
-                            
+                            else:
+                                accumulated_batch = None
+
+                            filled_batch_count += 1
+                            print(
+                                f"Batch #{filled_batch_count} filled. "
+                                f"Proceeding with update. Size: {len(batch)}, "
+                                f"global_step: {self.global_steps}, "
+                                f"generation_batches_used: {num_gen_batches}"
+                            )
                             num_gen_batches = 0
-                            print(f"Batch filled. Proceeding with update. Size: {len(batch)}")
                         # ================================= End of Filter =================================
 
                     # ================================= End of Xuqing's modification ========================================================

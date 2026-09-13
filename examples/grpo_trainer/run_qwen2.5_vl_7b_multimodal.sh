@@ -3,8 +3,8 @@
 set -x
 ENGINE=${1:-vllm}
 export PYTHONPATH=/fs-computility/wangxuhong/yangxuqing/
-export http_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
-export https_proxy=https://yangxuqing:Jf4r13R0xhV1QmLuDUoztEhzQS3fAAtkCB8Y97ypk5d0xTaO7H9hBiQFTCFL@volc-proxy.pjlab.org.cn:13128
+export http_proxy=http://localusr:localpass@100.96.31.230:39111
+export https_proxy=http://localusr:localpass@100.96.31.230:39111
 # c2rm_train_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/train_promptv7.parquet
 # c2rm_test_path=/fs-computility/wangxuhong/yangxuqing/C2RM/data_C2RM/q/qwen7b/test_promptv7.parquet
 train_path=/fs-computility/wangxuhong/yangxuqing/post_processing/create_training_data/data/multimodal/multimodal_train_promptv8.parquet

@@ -8,6 +8,8 @@
 **/*.tar.gz
 **/playground
 **/wandb
+**/merged_model
+**.whl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

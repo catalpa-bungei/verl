@@ -22,10 +22,10 @@ from post_processing.processing.answer_comparison import AnswerComparator
 def extract_confidence_level(model_output: str) -> Optional[int]:
     """
     Extract confidence level from the model output.
-    
+
     Args:
         model_output (str): The output string from the model.
-        
+
     Returns:
         Optional[int]: The confidence level as an integer, or None if not found.
     """
@@ -42,10 +42,10 @@ def extract_confidence_level(model_output: str) -> Optional[int]:
 def convert_to_dataset_type(dataset_name: str) -> str:
     """
     Convert dataset name to a standardized dataset type.
-    
+
     Args:
         dataset_name (str): The name of the dataset.
-        
+
     Returns:
         str: The standardized dataset type.
     """
@@ -80,12 +80,12 @@ confidence_levels = []
 def compute_score_reference_data(data_source, solution_str, ground_truth, extra_info=None):
     """
     Compute the score based on known correctness and reference data correctness.
-    
+
     Args:
         known (str): Whether the correctness is known. "known" or "unknown" or "unmatched".
         correctness (str): The correctness of the solution. "correct" or "incorrect" or "unmatched".
         reference_data_correct_rate (float): The correctness of the reference data, 0, 0.2, 0.5, 0.8, or 1.0.
-    
+
     Returns:
         float: The computed score.
     """
@@ -106,7 +106,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         reference_tag = "all_wrong"
     else:
         reference_tag = "partial_correct"
-        
+
     dataset = extra_info.get("dataset", "unmatched") if extra_info else "unmatched"
     if dataset == "unmatched":
         raise ValueError("Dataset is not provided in extra_info.")
@@ -115,13 +115,13 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     answer_extractor = AnswerExtractor(dataset_type=dataset_type)
     answer_comparator = AnswerComparator(dataset_type=dataset_type)
     solution = answer_extractor.extract_answer(id=None, model_output=solution_str)
-    
+
     # ground_truth = ground_truth.lower()
     ground_truth_extracted = answer_extractor.extract_answer(id=None, model_output=ground_truth)
     if dataset_type == "webinstruct":
         if 'integer' in data_id.lower():
             answer_type = "Integer"
-        else: 
+        else:
             raise ValueError("Unsupported answer type for webinstruct dataset.")
         compare_result = answer_comparator.compare_webinstruct_answer(solution, ground_truth, answer_type)
     else:
@@ -132,7 +132,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         correctness = "incorrect"
     elif compare_result == 'unmatched':
         correctness = "incorrect"
-    
+
     range = 10  # Assuming the confidence level is between 1 and 10
     confidence_level = extract_confidence_level(solution_str)
     confidence_levels.append(confidence_level)
@@ -141,7 +141,7 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
     confidence_levels_wo_unmatched = [cl for cl in confidence_levels if cl != -1]
     avg_confidence = sum(confidence_levels_wo_unmatched) / len(confidence_levels_wo_unmatched) if confidence_levels_wo_unmatched else 0
     confidence_variance = sum((cl - avg_confidence) ** 2 for cl in confidence_levels_wo_unmatched) / len(confidence_levels_wo_unmatched) if confidence_levels_wo_unmatched else 0
-    
+
     unique_confidence_levels = set(confidence_levels)
     number_of_unique_confidence_levels = len(unique_confidence_levels)
     diversity = number_of_unique_confidence_levels / len(confidence_levels) if confidence_levels else 0
@@ -163,9 +163,9 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
 
     # print("solution_str:", solution_str,"\n")
     print("confidence:",confidence_level, "| solution:", solution, "| ground_truth:", ground_truth, "| ground_truth_extracted:", ground_truth_extracted, "| correctness:", correctness, "| reference_accuracy:", reference_accuracy, "| current_step:", current_step, "| total_step:", total_step)
-    
+
     beta = 0
-    alpha = 0.5
+    alpha = 0
     w_ece = 1
     w_diversity = 0
     known_correct_tag = ""
@@ -199,67 +199,67 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         if reference_tag == "all_correct":
             if known_signal == "known":
                 if correctness == "correct":
-                    score = 0.9 + format_score + beta + ece_score 
+                    score = 0.9 + format_score + beta + ece_score
                     known_correct_tag = "all_correct -> known_correct"
                 elif correctness == "incorrect":
-                    score = 0 + format_score - beta + ece_score - alpha 
+                    score = 0 + format_score - beta + ece_score - alpha
                     known_correct_tag = "all_correct -> known_incorrect"
             elif known_signal == "unknown":
                 if correctness == "correct":
-                    score =  0.9 + format_score - beta + ece_score 
+                    score =  0.9 + format_score - beta + ece_score
                     known_correct_tag = "all_correct -> unknown_correct"
                 elif correctness == "incorrect":
-                    score =  0 + format_score + beta + ece_score - alpha 
+                    score =  0 + format_score + beta + ece_score - alpha
                     known_correct_tag = "all_correct -> unknown_incorrect"
             else:
                 if correctness == "correct":
                     score =  0.9 + format_score + ece_score
                 elif correctness == "incorrect":
-                    score =  0 + format_score + ece_score - alpha 
+                    score =  0 + format_score + ece_score - alpha
                 known_correct_tag = "unmatched-known"
-            
+
         elif reference_tag == "all_wrong":
             if known_signal == "known":
                 if correctness == "correct":
-                    score =  0.9 + format_score + beta + ece_score + alpha 
+                    score =  0.9 + format_score + beta + ece_score + alpha
                     known_correct_tag = "all_wrong -> known_correct"
                 elif correctness == "incorrect":
-                    score =  0 + format_score - beta + ece_score 
+                    score =  0 + format_score - beta + ece_score
                     known_correct_tag = "all_wrong -> known_incorrect"
             elif known_signal == "unknown":
                 if correctness == "correct":
-                    score =  0.9 + format_score - beta + ece_score + alpha 
+                    score =  0.9 + format_score - beta + ece_score + alpha
                     known_correct_tag = "all_wrong -> unknown_correct"
                 elif correctness == "incorrect":
-                    score =  0 + format_score + beta + ece_score 
+                    score =  0 + format_score + beta + ece_score
                     known_correct_tag = "all_wrong -> unknown_incorrect"
             else:
                 if correctness == "correct":
-                    score =  0.9 + format_score + ece_score + alpha 
+                    score =  0.9 + format_score + ece_score + alpha
                 elif correctness == "incorrect":
-                    score =  0 + format_score + ece_score 
+                    score =  0 + format_score + ece_score
                 known_correct_tag = "unmatched-known"
-        
+
         elif reference_tag == "partial_correct":
             if known_signal == "known":
                 if correctness == "correct":
-                    score =  0.9 + format_score + beta + ece_score 
+                    score =  0.9 + format_score + beta + ece_score
                     known_correct_tag = "partial_correct -> known_correct"
                 elif correctness == "incorrect":
-                    score =  0 + format_score - beta + ece_score 
+                    score =  0 + format_score - beta + ece_score
                     known_correct_tag = "partial_correct -> known_incorrect"
             elif known_signal == "unknown":
                 if correctness == "correct":
-                    score =  0.9 + format_score - beta + ece_score 
+                    score =  0.9 + format_score - beta + ece_score
                     known_correct_tag = "partial_correct -> unknown_correct"
                 elif correctness == "incorrect":
-                    score =  0 + format_score + beta + ece_score 
+                    score =  0 + format_score + beta + ece_score
                     known_correct_tag = "partial_correct -> unknown_incorrect"
             else:
                 if correctness == "correct":
-                    score =  0.9 + format_score + ece_score 
+                    score =  0.9 + format_score + ece_score
                 elif correctness == "incorrect":
-                    score =  0 + format_score + ece_score 
+                    score =  0 + format_score + ece_score
                 known_correct_tag = "unmatched-known"
 
     # score = score - 0.5   # Normalize the score to be between -1 and 1
@@ -272,11 +272,11 @@ def compute_score_reference_data(data_source, solution_str, ground_truth, extra_
         "confidence_level": confidence_level,
         "correctness": correctness,
         "unique_confidence_ratio": diversity,
-        "reference_accuracy": reference_accuracy, 
+        "reference_accuracy": reference_accuracy,
         "ece": 1 - current_ece_score
     }
     return reward
 
-        
+
 
 

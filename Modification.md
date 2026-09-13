@@ -9,9 +9,9 @@ The customized GRPO filtering in `verl/trainer/ppo/ray_trainer.py` now supports 
 - This means one `uid` group may keep fewer than `rollout.n` trajectories.
 - GRPO remains compatible because advantage computation groups samples by `uid`, not by fixed-size chunks of `rollout.n`.
 - Group statistics such as `group_avg_acc` and `group_correlation` are recomputed after filtering, so reward computation sees the truncated group actually used for training.
-- Accumulated batches are popped only at whole-`uid` group boundaries. This avoids splitting one prompt group across two PPO updates.
-- The final training batch must also satisfy framework batch-size constraints, including DP partitioning, actor PPO mini-batch size, and log-prob micro-batch sizes.
-- No fake/default trajectories are added. If there are not enough real kept trajectories to form a compatible batch, the trainer keeps accumulating until it can form one, or skips the update after the generation limit.
+- Once the accumulated filtered batch reaches the target size, the trainer slices by raw sample count.
+- This raw slice may cut through the middle of a `uid` group. This is intentional in the current implementation.
+- No fake/default trajectories are added. If there are more real kept trajectories than needed, the remainder is carried over to the next step.
 
 ### Strict DAPO Filter
 
@@ -43,7 +43,7 @@ The first failed trajectory is included because the cutoff happens after observi
 keep_indices_adaptive.extend(indices[: cutoff_idx + 1])
 ```
 
-### Example: Avoid Splitting a GRPO Group
+### Example: Raw Slicing May Split a GRPO Group
 
 After adaptive filtering, each prompt may keep a different number of trajectories:
 
@@ -66,49 +66,36 @@ If `target_size = 6`, a raw slice would produce:
 [A0, A1, A2, B0, B1, C0]
 ```
 
-That would split `uid C`, leaving `C1 C2 C3` outside this PPO update. Since GRPO advantage is grouped by `uid`, this would make `C0` behave like a singleton group in the current update.
-
-Instead, the trainer pops only at whole-`uid` boundaries. Valid boundaries in this example are:
+This intentionally splits `uid C`, leaving `C1 C2 C3` outside this PPO update:
 
 ```text
-end = 3  -> [A0, A1, A2]
-end = 5  -> [A0, A1, A2, B0, B1]
-end = 9  -> [A0, A1, A2, B0, B1, C0, C1, C2, C3]
-end = 10 -> all groups
+training batch: [A0, A1, A2, B0, B1, C0]
+carry over:     [C1, C2, C3, D0]
 ```
 
-For `target_size = 6`, it may choose `end = 5` instead of cutting at `6`:
+After slicing, `group_avg_acc` and `group_correlation` are recomputed on the sliced training batch. Therefore `C0` is treated according to the samples present in the current PPO update, and the carried-over `C1 C2 C3` will be handled in a later update.
 
-```text
-training batch: [A0, A1, A2, B0, B1]
-carry over:     [C0, C1, C2, C3, D0]
-```
+### Example: Batch Size Reached
 
-### Example: Batch Divisor Compatibility
-
-The trainer does not add default or fake trajectories. It waits until it can form a real batch whose size is compatible with downstream splitting.
+The trainer does not add default or fake trajectories. It slices as soon as the accumulated filtered batch reaches the target size.
 
 Example:
 
 ```text
-world_size = 8
-rollout.n = 4
-actor.ppo_mini_batch_size = 16 prompts
-actor update mini-batch after rollout = 16 * 4 = 64 trajectories
-rollout log_prob_micro_batch_size = 32
-ref log_prob_micro_batch_size = 32
+target_size = 64
+current_size = 70
 ```
 
-The required divisor is:
+The trainer takes:
+
+```python
+actual_batch_size = min(current_size, target_size)
+batch = accumulated_batch[:actual_batch_size]
+```
+
+So the current PPO update receives the first `64` real trajectories, and the remaining `6` real trajectories are carried over:
 
 ```text
-lcm(8, 64, 32, 32) = 64
+training batch size: 64
+carried over:        6
 ```
-
-So the final filtered training batch must contain `64`, `128`, `192`, ... real trajectories. If the accumulated filtered data has `70` trajectories, the trainer looks for the largest prefix that:
-
-- ends at a whole-`uid` boundary,
-- is not larger than the target size,
-- has length divisible by `64`.
-
-If no such prefix exists yet, the trainer continues accumulating more real filtered trajectories. If the generation limit is reached and no compatible prefix can be formed, the update is skipped rather than padded with fake data.

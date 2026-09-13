@@ -110,9 +110,9 @@
       <li>This means one <code>uid</code> group may keep fewer than <code>rollout.n</code> trajectories.</li>
       <li>GRPO remains compatible because advantage computation groups samples by <code>uid</code>, not by fixed-size chunks of <code>rollout.n</code>.</li>
       <li>Group statistics such as <code>group_avg_acc</code> and <code>group_correlation</code> are recomputed after filtering, so reward computation sees the truncated group actually used for training.</li>
-      <li>Accumulated batches are popped only at whole-<code>uid</code> group boundaries. This avoids splitting one prompt group across two PPO updates.</li>
-      <li>The final training batch must also satisfy framework batch-size constraints, including DP partitioning, actor PPO mini-batch size, and log-prob micro-batch sizes.</li>
-      <li>No fake/default trajectories are added. If there are not enough real kept trajectories to form a compatible batch, the trainer keeps accumulating until it can form one, or skips the update after the generation limit.</li>
+      <li>Once the accumulated filtered batch reaches the target size, the trainer slices by raw sample count.</li>
+      <li>This raw slice may cut through the middle of a <code>uid</code> group. This is intentional in the current implementation.</li>
+      <li>No fake/default trajectories are added. If there are more real kept trajectories than needed, the remainder is carried over to the next step.</li>
     </ul>
 
     <h3>Strict DAPO Filter</h3>
@@ -137,7 +137,7 @@
 
     <pre><code>keep_indices_adaptive.extend(indices[: cutoff_idx + 1])</code></pre>
 
-    <h3>Example: Avoid Splitting a GRPO Group</h3>
+    <h3>Example: Raw Slicing May Split a GRPO Group</h3>
 
     <p>After adaptive filtering, each prompt may keep a different number of trajectories:</p>
 
@@ -154,46 +154,31 @@ uid D: D0              # kept 1</code></pre>
 
     <pre><code>[A0, A1, A2, B0, B1, C0]</code></pre>
 
-    <p>That would split <code>uid C</code>, leaving <code>C1 C2 C3</code> outside this PPO update. Since GRPO advantage is grouped by <code>uid</code>, this would make <code>C0</code> behave like a singleton group in the current update.</p>
+    <p>This intentionally splits <code>uid C</code>, leaving <code>C1 C2 C3</code> outside this PPO update:</p>
 
-    <p>Instead, the trainer pops only at whole-<code>uid</code> boundaries. Valid boundaries in this example are:</p>
+    <pre><code>training batch: [A0, A1, A2, B0, B1, C0]
+carry over:     [C1, C2, C3, D0]</code></pre>
 
-    <pre><code>end = 3  -&gt; [A0, A1, A2]
-end = 5  -&gt; [A0, A1, A2, B0, B1]
-end = 9  -&gt; [A0, A1, A2, B0, B1, C0, C1, C2, C3]
-end = 10 -&gt; all groups</code></pre>
+    <p>After slicing, <code>group_avg_acc</code> and <code>group_correlation</code> are recomputed on the sliced training batch. Therefore <code>C0</code> is treated according to the samples present in the current PPO update, and the carried-over <code>C1 C2 C3</code> will be handled in a later update.</p>
 
-    <p>For <code>target_size = 6</code>, it may choose <code>end = 5</code> instead of cutting at <code>6</code>:</p>
+    <h3>Example: Batch Size Reached</h3>
 
-    <pre><code>training batch: [A0, A1, A2, B0, B1]
-carry over:     [C0, C1, C2, C3, D0]</code></pre>
-
-    <h3>Example: Batch Divisor Compatibility</h3>
-
-    <p>The trainer does not add default or fake trajectories. It waits until it can form a real batch whose size is compatible with downstream splitting.</p>
+    <p>The trainer does not add default or fake trajectories. It slices as soon as the accumulated filtered batch reaches the target size.</p>
 
     <p>Example:</p>
 
-    <pre><code>world_size = 8
-rollout.n = 4
-actor.ppo_mini_batch_size = 16 prompts
-actor update mini-batch after rollout = 16 * 4 = 64 trajectories
-rollout log_prob_micro_batch_size = 32
-ref log_prob_micro_batch_size = 32</code></pre>
+    <pre><code>target_size = 64
+current_size = 70</code></pre>
 
-    <p>The required divisor is:</p>
+    <p>The trainer takes:</p>
 
-    <pre><code>lcm(8, 64, 32, 32) = 64</code></pre>
+    <pre><code>actual_batch_size = min(current_size, target_size)
+batch = accumulated_batch[:actual_batch_size]</code></pre>
 
-    <p>So the final filtered training batch must contain <code>64</code>, <code>128</code>, <code>192</code>, ... real trajectories. If the accumulated filtered data has <code>70</code> trajectories, the trainer looks for the largest prefix that:</p>
+    <p>So the current PPO update receives the first <code>64</code> real trajectories, and the remaining <code>6</code> real trajectories are carried over:</p>
 
-    <ul>
-      <li>ends at a whole-<code>uid</code> boundary,</li>
-      <li>is not larger than the target size,</li>
-      <li>has length divisible by <code>64</code>.</li>
-    </ul>
-
-    <p>If no such prefix exists yet, the trainer continues accumulating more real filtered trajectories. If the generation limit is reached and no compatible prefix can be formed, the update is skipped rather than padded with fake data.</p>
+    <pre><code>training batch size: 64
+carried over:        6</code></pre>
   </main>
 </body>
 </html>
